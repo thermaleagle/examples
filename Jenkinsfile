@@ -12,7 +12,7 @@ pipeline {
     stage ('Deploy') {
       steps {
         script {
-          echo "<please implement deploy stage...> 
+          echo "<please implement deploy stage...>"
         }
       }
     }
