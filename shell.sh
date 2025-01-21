@@ -16,15 +16,15 @@ TOTAL_OTHER_BRANCHES=0
 for PROJECT in "${PROJECTS[@]}"; do
     echo "Fetching repositories in project: $PROJECT"
 
-    # Get all repositories in the project
-    REPOS=$(curl -s -u "$USERNAME:$PASSWORD" "$BITBUCKET_URL/rest/api/1.0/projects/$PROJECT/repos" | jq -r '.values[].slug')
+    # Get all repositories in the project (without jq)
+    REPOS=$(curl -s -u "$USERNAME:$PASSWORD" "$BITBUCKET_URL/rest/api/1.0/projects/$PROJECT/repos" | grep -o '"slug":"[^"]*' | sed 's/"slug":"//')
 
     # Loop through each repository and count branches
     for REPO in $REPOS; do
         echo "  Repository: $REPO"
 
-        # Fetch all branch names
-        BRANCHES=$(curl -s -u "$USERNAME:$PASSWORD" "$BITBUCKET_URL/rest/api/1.0/projects/$PROJECT/repos/$REPO/branches" | jq -r '.values[].displayId')
+        # Fetch all branch names (without jq)
+        BRANCHES=$(curl -s -u "$USERNAME:$PASSWORD" "$BITBUCKET_URL/rest/api/1.0/projects/$PROJECT/repos/$REPO/branches" | grep -o '"displayId":"[^"]*' | sed 's/"displayId":"//')
 
         MAIN_BRANCHES=0
         OTHER_BRANCHES=0
