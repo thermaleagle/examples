@@ -3,8 +3,7 @@ pipeline {
 
     environment {
         BITBUCKET_URL = "https://your-bitbucket-server-url"
-        PROJECTS = "PROJECT1,PROJECT2,PROJECT3,PROJECT4,PROJECT5,PROJECT6,PROJECT7,PROJECT8,PROJECT9,PROJECT10,PROJECT11,PROJECT12,PROJECT13,PROJECT14,PROJECT15,PROJECT16,PROJECT17,PROJECT18,PROJECT19,PROJECT20"
-        CSV_FILE = "branch_counts.csv"
+        PROJECTS = "PROJECT1,PROJECT2,PROJECT3"
     }
 
     stages {
@@ -12,10 +11,6 @@ pipeline {
             steps {
                 script {
                     def projectList = env.PROJECTS.split(",")
-                    def csvContent = []
-
-                    // Add CSV header
-                    csvContent.add("Project,Repository,Main,Master,Release/*,Hotfix/*,Feature")
 
                     // Function to make paginated API calls using cURL and access tokens
                     def makePaginatedApiCall = { baseUrl, token ->
@@ -47,14 +42,11 @@ pipeline {
                         return allResults
                     }
 
-                    // Create a list of credential IDs dynamically for withCredentials block
-                    def credentialBindings = projectList.collect { project ->
-                        return string(credentialsId: "bb-token-${project.toLowerCase()}", variable: "BB_TOKEN_${project}")
-                    }
-
-                    withCredentials(credentialBindings) {
+                    withCredentials(projectList.collect { 
+                        string(credentialsId: "bb-token-${it.toLowerCase()}", variable: "BB_TOKEN_${it}") 
+                    }) {
                         def projectTokens = [:]
-                        
+
                         // Assign each project's access token dynamically
                         projectList.each { project ->
                             projectTokens[project] = env."BB_TOKEN_${project}"
@@ -63,6 +55,11 @@ pipeline {
                         // Process each project sequentially
                         projectList.each { project ->
                             def accessToken = projectTokens[project]
+                            def csvFile = "branch_counts_${project}.csv"
+                            def csvContent = []
+
+                            // Add CSV header
+                            csvContent.add("Project,Repository,Main,Master,Release/*,Hotfix/*,Feature")
 
                             if (!accessToken) {
                                 echo "WARNING: No access token found for project ${project}. Skipping."
@@ -109,20 +106,24 @@ pipeline {
 
                                 csvContent.add("${project},${repoName},${mainBranches},${masterBranches},${releaseBranches},${hotfixBranches},${featureBranches}")
                             }
+
+                            // Write CSV to file for this project
+                            writeFile file: csvFile, text: csvContent.join("\n")
+                            echo "CSV file '${csvFile}' created successfully."
                         }
                     }
-
-                    // Write CSV to file
-                    writeFile file: env.CSV_FILE, text: csvContent.join("\n")
-                    echo "CSV file '${env.CSV_FILE}' created successfully."
                 }
             }
         }
+    }
 
-        stage('Archive CSV as Artifact') {
-            steps {
-                archiveArtifacts artifacts: env.CSV_FILE, fingerprint: true
-                echo "CSV file archived successfully. Download it from the Jenkins UI."
+    post {
+        always {
+            script {
+                def projectList = env.PROJECTS.split(",")
+                def csvFiles = projectList.collect { "branch_counts_${it}.csv" }
+                archiveArtifacts artifacts: csvFiles.join(","), fingerprint: true
+                echo "CSV files archived successfully. Download them from the Jenkins UI."
             }
         }
     }
