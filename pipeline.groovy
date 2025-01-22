@@ -26,7 +26,7 @@ pipeline {
                     // Convert PROJECTS environment variable into a list
                     def projectList = env.PROJECTS.split(",")
 
-                    // Function to make paginated API calls
+                    // Function to make paginated API calls without Base64 encoding
                     def makePaginatedApiCall = { baseUrl ->
                         def allResults = []
                         def start = 0
@@ -36,9 +36,9 @@ pipeline {
                             def url = "${baseUrl}?start=${start}"
                             try {
                                 def connection = new URL(url).openConnection()
-                                String auth = "${env.BITBUCKET_USER}:${env.BITBUCKET_PASS}".bytes.encodeBase64().toString()
-                                connection.setRequestProperty("Authorization", "Basic ${auth}")
+                                connection.setRequestProperty("Authorization", "Basic ${env.BITBUCKET_USER}:${env.BITBUCKET_PASS}")
                                 connection.setRequestProperty("Accept", "application/json")
+                                connection.setRequestMethod("GET")
                                 connection.connect()
 
                                 if (connection.responseCode == 200) {
