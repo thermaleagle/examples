@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         BITBUCKET_URL = "https://your-bitbucket-server-url"
-        PROJECTS = "PROJECT1,PROJECT2,PROJECT3"
+        PROJECTS = "PROJECT1,PROJECT2,PROJECT3,PROJECT4,PROJECT5,PROJECT6,PROJECT7,PROJECT8,PROJECT9,PROJECT10,PROJECT11,PROJECT12,PROJECT13,PROJECT14,PROJECT15,PROJECT16,PROJECT17,PROJECT18,PROJECT19,PROJECT20"
         CSV_FILE = "branch_counts.csv"
     }
 
@@ -16,11 +16,6 @@ pipeline {
 
                     // Add CSV header
                     csvContent.add("Project,Repository,Main,Master,Release/*,Hotfix/*,Feature")
-
-                    // Function to get the correct access token for a given project
-                    def getAccessToken = { project ->
-                        return credentials("bb-token-${project.toLowerCase()}") // Assuming credentials IDs are "bb-token-project1", etc.
-                    }
 
                     // Function to make paginated API calls using cURL and access tokens
                     def makePaginatedApiCall = { baseUrl, token ->
@@ -52,54 +47,68 @@ pipeline {
                         return allResults
                     }
 
-                    // Process each project sequentially
-                    projectList.each { project ->
-                        def accessToken = getAccessToken(project)
+                    // Create a list of credential IDs dynamically for withCredentials block
+                    def credentialBindings = projectList.collect { project ->
+                        return string(credentialsId: "bb-token-${project.toLowerCase()}", variable: "BB_TOKEN_${project}")
+                    }
 
-                        if (!accessToken) {
-                            echo "WARNING: No access token found for project ${project}. Skipping."
-                            return
+                    withCredentials(credentialBindings) {
+                        def projectTokens = [:]
+                        
+                        // Assign each project's access token dynamically
+                        projectList.each { project ->
+                            projectTokens[project] = env."BB_TOKEN_${project}"
                         }
 
-                        echo "Fetching repositories in project: ${project}"
+                        // Process each project sequentially
+                        projectList.each { project ->
+                            def accessToken = projectTokens[project]
 
-                        def reposUrl = "${env.BITBUCKET_URL}/rest/api/1.0/projects/${project}/repos"
-                        def repos = makePaginatedApiCall(reposUrl, accessToken)
-
-                        if (!repos) {
-                            echo "WARNING: No repositories found in project ${project} or failed to fetch data."
-                            return
-                        }
-
-                        repos.each { repo ->
-                            def repoName = repo.slug
-                            echo "  Processing repository: ${repoName}"
-
-                            def branchesUrl = "${env.BITBUCKET_URL}/rest/api/1.0/projects/${project}/repos/${repoName}/branches"
-                            def branches = makePaginatedApiCall(branchesUrl, accessToken)
-
-                            def mainBranches = 0
-                            def masterBranches = 0
-                            def releaseBranches = 0
-                            def hotfixBranches = 0
-                            def featureBranches = 0
-
-                            branches.each { branch ->
-                                def branchName = branch.displayId
-                                if (branchName == "main") {
-                                    mainBranches++
-                                } else if (branchName == "master") {
-                                    masterBranches++
-                                } else if (branchName.startsWith("release/")) {
-                                    releaseBranches++
-                                } else if (branchName.startsWith("hotfix/")) {
-                                    hotfixBranches++
-                                } else {
-                                    featureBranches++
-                                }
+                            if (!accessToken) {
+                                echo "WARNING: No access token found for project ${project}. Skipping."
+                                return
                             }
 
-                            csvContent.add("${project},${repoName},${mainBranches},${masterBranches},${releaseBranches},${hotfixBranches},${featureBranches}")
+                            echo "Fetching repositories in project: ${project}"
+
+                            def reposUrl = "${env.BITBUCKET_URL}/rest/api/1.0/projects/${project}/repos"
+                            def repos = makePaginatedApiCall(reposUrl, accessToken)
+
+                            if (!repos) {
+                                echo "WARNING: No repositories found in project ${project} or failed to fetch data."
+                                return
+                            }
+
+                            repos.each { repo ->
+                                def repoName = repo.slug
+                                echo "  Processing repository: ${repoName}"
+
+                                def branchesUrl = "${env.BITBUCKET_URL}/rest/api/1.0/projects/${project}/repos/${repoName}/branches"
+                                def branches = makePaginatedApiCall(branchesUrl, accessToken)
+
+                                def mainBranches = 0
+                                def masterBranches = 0
+                                def releaseBranches = 0
+                                def hotfixBranches = 0
+                                def featureBranches = 0
+
+                                branches.each { branch ->
+                                    def branchName = branch.displayId
+                                    if (branchName == "main") {
+                                        mainBranches++
+                                    } else if (branchName == "master") {
+                                        masterBranches++
+                                    } else if (branchName.startsWith("release/")) {
+                                        releaseBranches++
+                                    } else if (branchName.startsWith("hotfix/")) {
+                                        hotfixBranches++
+                                    } else {
+                                        featureBranches++
+                                    }
+                                }
+
+                                csvContent.add("${project},${repoName},${mainBranches},${masterBranches},${releaseBranches},${hotfixBranches},${featureBranches}")
+                            }
                         }
                     }
 
