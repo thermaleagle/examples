@@ -5,6 +5,7 @@ pipeline {
         BITBUCKET_URL = "https://your-bitbucket-server-url"
         PROJECTS = "PROJECT1,PROJECT2,PROJECT3"
         CSV_FILE = "branch_counts.csv"
+        MAX_EXECUTORS = 10  // Maximum number of parallel executors
     }
 
     stages {
@@ -23,6 +24,7 @@ pipeline {
                 script {
                     def projectList = env.PROJECTS.split(",")
                     def csvContent = []
+                    def semaphore = new java.util.concurrent.Semaphore(env.MAX_EXECUTORS.toInteger())  // Limits parallel execution
 
                     // Add CSV header
                     csvContent.add("Project,Repository,Main,Master,Release/*,Hotfix/*,Other")
@@ -61,55 +63,65 @@ pipeline {
 
                     projectList.each { project ->
                         parallelTasks["Process_${project}"] = {
+                            semaphore.acquire()  // Ensure we do not exceed MAX_EXECUTORS
                             node {
-                                echo "Fetching repositories in project: ${project}"
+                                try {
+                                    echo "Fetching repositories in project: ${project}"
 
-                                def reposUrl = "${env.BITBUCKET_URL}/rest/api/1.0/projects/${project}/repos"
-                                def repos = makePaginatedApiCall(reposUrl)
+                                    def reposUrl = "${env.BITBUCKET_URL}/rest/api/1.0/projects/${project}/repos"
+                                    def repos = makePaginatedApiCall(reposUrl)
 
-                                if (!repos) {
-                                    echo "WARNING: No repositories found in project ${project} or failed to fetch data."
-                                    return
-                                }
+                                    if (!repos) {
+                                        echo "WARNING: No repositories found in project ${project} or failed to fetch data."
+                                        return
+                                    }
 
-                                def repoTasks = [:]
+                                    def repoTasks = [:]
 
-                                repos.each { repo ->
-                                    def repoName = repo.slug
-                                    repoTasks["Repo_${repoName}"] = {
-                                        node {
-                                            echo "  Processing repository: ${repoName}"
+                                    repos.each { repo ->
+                                        def repoName = repo.slug
+                                        repoTasks["Repo_${repoName}"] = {
+                                            semaphore.acquire()  // Control concurrent repo processing
+                                            node {
+                                                try {
+                                                    echo "  Processing repository: ${repoName}"
 
-                                            def branchesUrl = "${env.BITBUCKET_URL}/rest/api/1.0/projects/${project}/repos/${repoName}/branches"
-                                            def branches = makePaginatedApiCall(branchesUrl)
+                                                    def branchesUrl = "${env.BITBUCKET_URL}/rest/api/1.0/projects/${project}/repos/${repoName}/branches"
+                                                    def branches = makePaginatedApiCall(branchesUrl)
 
-                                            def mainBranches = 0
-                                            def masterBranches = 0
-                                            def releaseBranches = 0
-                                            def hotfixBranches = 0
-                                            def otherBranches = 0
+                                                    def mainBranches = 0
+                                                    def masterBranches = 0
+                                                    def releaseBranches = 0
+                                                    def hotfixBranches = 0
+                                                    def otherBranches = 0
 
-                                            branches.each { branch ->
-                                                def branchName = branch.displayId
-                                                if (branchName == "main") {
-                                                    mainBranches++
-                                                } else if (branchName == "master") {
-                                                    masterBranches++
-                                                } else if (branchName.startsWith("release/")) {
-                                                    releaseBranches++
-                                                } else if (branchName.startsWith("hotfix/")) {
-                                                    hotfixBranches++
-                                                } else {
-                                                    otherBranches++
+                                                    branches.each { branch ->
+                                                        def branchName = branch.displayId
+                                                        if (branchName == "main") {
+                                                            mainBranches++
+                                                        } else if (branchName == "master") {
+                                                            masterBranches++
+                                                        } else if (branchName.startsWith("release/")) {
+                                                            releaseBranches++
+                                                        } else if (branchName.startsWith("hotfix/")) {
+                                                            hotfixBranches++
+                                                        } else {
+                                                            otherBranches++
+                                                        }
+                                                    }
+
+                                                    csvContent.add("${project},${repoName},${mainBranches},${masterBranches},${releaseBranches},${hotfixBranches},${otherBranches}")
+                                                } finally {
+                                                    semaphore.release()  // Release slot for another task
                                                 }
                                             }
-
-                                            csvContent.add("${project},${repoName},${mainBranches},${masterBranches},${releaseBranches},${hotfixBranches},${otherBranches}")
                                         }
                                     }
-                                }
 
-                                parallel repoTasks
+                                    parallel repoTasks
+                                } finally {
+                                    semaphore.release()  // Release project-level slot
+                                }
                             }
                         }
                     }
