@@ -17,13 +17,11 @@ pipeline {
             }
         }
 
-        stage('Count Branches') {
+        stage('Count Branches and Generate Report') {
             steps {
                 script {
-                    def totalMainBranches = 0
-                    def totalOtherBranches = 0
-
                     def projectList = env.PROJECTS.split(",")
+                    def outputTable = []
 
                     // Function to make paginated API calls using cURL and readJSON
                     def makePaginatedApiCall = { baseUrl ->
@@ -42,7 +40,7 @@ pipeline {
                                 break
                             }
 
-                            // FIX: Use readJSON to parse and avoid LazyMap issues
+                            // Use readJSON for CPS-safe parsing
                             def parsedResponse = readJSON(text: jsonResponse)
 
                             allResults.addAll(parsedResponse.values)
@@ -75,29 +73,43 @@ pipeline {
                             def branches = makePaginatedApiCall(branchesUrl)
 
                             def mainBranches = 0
+                            def masterBranches = 0
+                            def releaseBranches = 0
+                            def hotfixBranches = 0
                             def otherBranches = 0
 
                             branches.each { branch ->
                                 def branchName = branch.displayId
-                                if (branchName == "main" || branchName == "master" || branchName.startsWith("release/") || branchName.startsWith("hotfix/")) {
+                                if (branchName == "main") {
                                     mainBranches++
+                                } else if (branchName == "master") {
+                                    masterBranches++
+                                } else if (branchName.startsWith("release/")) {
+                                    releaseBranches++
+                                } else if (branchName.startsWith("hotfix/")) {
+                                    hotfixBranches++
                                 } else {
                                     otherBranches++
                                 }
                             }
 
-                            echo "    Main Branches (main, master, release/*, hotfix/*): ${mainBranches}"
-                            echo "    Other Branches: ${otherBranches}"
-
-                            totalMainBranches += mainBranches
-                            totalOtherBranches += otherBranches
+                            outputTable.add("${project}\t${repoName}\t${mainBranches}\t${masterBranches}\t${releaseBranches}\t${hotfixBranches}\t${otherBranches}")
                         }
                     }
 
-                    echo "======================================"
-                    echo "Total Main Branches Across All Projects: ${totalMainBranches}"
-                    echo "Total Other Branches Across All Projects: ${totalOtherBranches}"
-                    echo "======================================"
+                    // Print the table header
+                    echo "=========================================="
+                    echo "Project\tRepository\tMain\tMaster\tRelease/*\tHotfix/*\tOther"
+                    echo "=========================================="
+
+                    // Print tab-separated values for Excel copy-paste
+                    outputTable.each { row ->
+                        echo row
+                    }
+
+                    echo "=========================================="
+                    echo "Copy the above table and paste it into Excel."
+                    echo "=========================================="
                 }
             }
         }
