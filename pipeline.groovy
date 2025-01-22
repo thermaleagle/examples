@@ -26,7 +26,7 @@ pipeline {
                     // Convert PROJECTS environment variable into a list
                     def projectList = env.PROJECTS.split(",")
 
-                    // Function to make paginated API calls without Base64 encoding
+                    // Function to make paginated API calls using cURL
                     def makePaginatedApiCall = { baseUrl ->
                         def allResults = []
                         def start = 0
@@ -34,30 +34,23 @@ pipeline {
 
                         while (nextPageExists) {
                             def url = "${baseUrl}?start=${start}"
-                            try {
-                                def connection = new URL(url).openConnection()
-                                connection.setRequestProperty("Authorization", "Basic ${env.BITBUCKET_USER}:${env.BITBUCKET_PASS}")
-                                connection.setRequestProperty("Accept", "application/json")
-                                connection.setRequestMethod("GET")
-                                connection.connect()
+                            def command = """curl -s -u "${env.BITBUCKET_USER}:${env.BITBUCKET_PASS}" "${url}" """
 
-                                if (connection.responseCode == 200) {
-                                    def jsonResponse = new groovy.json.JsonSlurper().parse(connection.inputStream)
-                                    allResults.addAll(jsonResponse.values)
-
-                                    // Handle pagination
-                                    if (jsonResponse.isLastPage) {
-                                        nextPageExists = false
-                                    } else {
-                                        start = jsonResponse.nextPageStart
-                                    }
-                                } else {
-                                    echo "ERROR: Failed to fetch data from ${url}, Response Code: ${connection.responseCode}"
-                                    nextPageExists = false
-                                }
-                            } catch (Exception e) {
-                                echo "Exception while calling API: ${e.message}"
+                            def jsonResponse = sh(script: command, returnStdout: true).trim()
+                            if (!jsonResponse) {
+                                echo "ERROR: Failed to fetch data from ${url}"
                                 nextPageExists = false
+                                break
+                            }
+
+                            def parsedResponse = new groovy.json.JsonSlurper().parseText(jsonResponse)
+                            allResults.addAll(parsedResponse.values)
+
+                            // Handle pagination
+                            if (parsedResponse.isLastPage) {
+                                nextPageExists = false
+                            } else {
+                                start = parsedResponse.nextPageStart
                             }
                         }
                         return allResults
