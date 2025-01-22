@@ -2,7 +2,6 @@ pipeline {
     agent any
 
     environment {
-        BITBUCKET_URL = "https://your-bitbucket-server-url"
         PROJECTS = "PROJECT1,PROJECT2,PROJECT3"
     }
 
@@ -11,6 +10,13 @@ pipeline {
             steps {
                 script {
                     def projectList = env.PROJECTS.split(",")
+
+                    // Map of project names to their corresponding Bitbucket URLs
+                    def projectBitbucketUrls = [
+                        "PROJECT1": "https://bitbucket-url-1.com",
+                        "PROJECT2": "https://bitbucket-url-2.com",
+                        "PROJECT3": "https://bitbucket-url-3.com"
+                    ]
 
                     // Function to make paginated API calls using cURL and access tokens
                     def makePaginatedApiCall = { baseUrl, token ->
@@ -55,6 +61,7 @@ pipeline {
                         // Process each project sequentially
                         projectList.each { project ->
                             def accessToken = projectTokens[project]
+                            def bitbucketUrl = projectBitbucketUrls[project]
                             def csvFile = "branch_counts_${project}.csv"
                             def csvContent = []
 
@@ -66,9 +73,14 @@ pipeline {
                                 return
                             }
 
-                            echo "Fetching repositories in project: ${project}"
+                            if (!bitbucketUrl) {
+                                echo "WARNING: No Bitbucket URL found for project ${project}. Skipping."
+                                return
+                            }
 
-                            def reposUrl = "${env.BITBUCKET_URL}/rest/api/1.0/projects/${project}/repos"
+                            echo "Fetching repositories in project: ${project} from ${bitbucketUrl}"
+
+                            def reposUrl = "${bitbucketUrl}/rest/api/1.0/projects/${project}/repos"
                             def repos = makePaginatedApiCall(reposUrl, accessToken)
 
                             if (!repos) {
@@ -80,7 +92,7 @@ pipeline {
                                 def repoName = repo.slug
                                 echo "  Processing repository: ${repoName}"
 
-                                def branchesUrl = "${env.BITBUCKET_URL}/rest/api/1.0/projects/${project}/repos/${repoName}/branches"
+                                def branchesUrl = "${bitbucketUrl}/rest/api/1.0/projects/${project}/repos/${repoName}/branches"
                                 def branches = makePaginatedApiCall(branchesUrl, accessToken)
 
                                 def mainBranches = 0
