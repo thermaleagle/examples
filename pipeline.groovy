@@ -5,7 +5,7 @@ pipeline {
         BITBUCKET_URL = "https://your-bitbucket-server-url"
         PROJECTS = "PROJECT1,PROJECT2,PROJECT3"
         CSV_FILE = "branch_counts.csv"
-        MAX_EXECUTORS = 10  // Maximum number of parallel executors
+        MAX_EXECUTORS = 10  // Maximum parallel jobs
     }
 
     stages {
@@ -24,7 +24,6 @@ pipeline {
                 script {
                     def projectList = env.PROJECTS.split(",")
                     def csvContent = []
-                    def semaphore = new java.util.concurrent.Semaphore(env.MAX_EXECUTORS.toInteger())  // Limits parallel execution
 
                     // Add CSV header
                     csvContent.add("Project,Repository,Main,Master,Release/*,Hotfix/*,Other")
@@ -63,9 +62,8 @@ pipeline {
 
                     projectList.each { project ->
                         parallelTasks["Process_${project}"] = {
-                            semaphore.acquire()  // Ensure we do not exceed MAX_EXECUTORS
-                            node {
-                                try {
+                            lock(resource: "Parallel_Lock", quantity: env.MAX_EXECUTORS.toInteger()) {
+                                node {
                                     echo "Fetching repositories in project: ${project}"
 
                                     def reposUrl = "${env.BITBUCKET_URL}/rest/api/1.0/projects/${project}/repos"
@@ -81,9 +79,8 @@ pipeline {
                                     repos.each { repo ->
                                         def repoName = repo.slug
                                         repoTasks["Repo_${repoName}"] = {
-                                            semaphore.acquire()  // Control concurrent repo processing
-                                            node {
-                                                try {
+                                            lock(resource: "Parallel_Lock", quantity: env.MAX_EXECUTORS.toInteger()) {
+                                                node {
                                                     echo "  Processing repository: ${repoName}"
 
                                                     def branchesUrl = "${env.BITBUCKET_URL}/rest/api/1.0/projects/${project}/repos/${repoName}/branches"
@@ -111,16 +108,12 @@ pipeline {
                                                     }
 
                                                     csvContent.add("${project},${repoName},${mainBranches},${masterBranches},${releaseBranches},${hotfixBranches},${otherBranches}")
-                                                } finally {
-                                                    semaphore.release()  // Release slot for another task
                                                 }
                                             }
                                         }
                                     }
 
                                     parallel repoTasks
-                                } finally {
-                                    semaphore.release()  // Release project-level slot
                                 }
                             }
                         }
