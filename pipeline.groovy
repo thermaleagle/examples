@@ -4,6 +4,7 @@ pipeline {
     environment {
         BITBUCKET_URL = "https://your-bitbucket-server-url"
         PROJECTS = "PROJECT1,PROJECT2,PROJECT3"
+        CSV_FILE = "branch_counts.csv"
     }
 
     stages {
@@ -17,11 +18,14 @@ pipeline {
             }
         }
 
-        stage('Count Branches and Generate Report') {
+        stage('Count Branches in Parallel') {
             steps {
                 script {
                     def projectList = env.PROJECTS.split(",")
-                    def outputTable = []
+                    def csvContent = []
+
+                    // Add CSV header
+                    csvContent.add("Project,Repository,Main,Master,Release/*,Hotfix/*,Other")
 
                     // Function to make paginated API calls using cURL and readJSON
                     def makePaginatedApiCall = { baseUrl ->
@@ -30,7 +34,7 @@ pipeline {
                         def nextPageExists = true
 
                         while (nextPageExists) {
-                            def url = "${baseUrl}?start=${start}"
+                            def url = "${baseUrl}?start=${start}&limit=100"
                             def command = """curl -s -u "${env.BITBUCKET_USER}:${env.BITBUCKET_PASS}" "${url}" """
 
                             def jsonResponse = sh(script: command, returnStdout: true).trim()
@@ -40,7 +44,6 @@ pipeline {
                                 break
                             }
 
-                            // Use readJSON for CPS-safe parsing
                             def parsedResponse = readJSON(text: jsonResponse)
 
                             allResults.addAll(parsedResponse.values)
@@ -54,63 +57,76 @@ pipeline {
                         return allResults
                     }
 
+                    def parallelTasks = [:]
+
                     projectList.each { project ->
-                        echo "Fetching repositories in project: ${project}"
+                        parallelTasks["Process_${project}"] = {
+                            node {
+                                echo "Fetching repositories in project: ${project}"
 
-                        def reposUrl = "${env.BITBUCKET_URL}/rest/api/1.0/projects/${project}/repos"
-                        def repos = makePaginatedApiCall(reposUrl)
+                                def reposUrl = "${env.BITBUCKET_URL}/rest/api/1.0/projects/${project}/repos"
+                                def repos = makePaginatedApiCall(reposUrl)
 
-                        if (!repos) {
-                            echo "WARNING: No repositories found in project ${project} or failed to fetch data."
-                            return
-                        }
-
-                        repos.each { repo ->
-                            def repoName = repo.slug
-                            echo "  Processing repository: ${repoName}"
-
-                            def branchesUrl = "${env.BITBUCKET_URL}/rest/api/1.0/projects/${project}/repos/${repoName}/branches"
-                            def branches = makePaginatedApiCall(branchesUrl)
-
-                            def mainBranches = 0
-                            def masterBranches = 0
-                            def releaseBranches = 0
-                            def hotfixBranches = 0
-                            def otherBranches = 0
-
-                            branches.each { branch ->
-                                def branchName = branch.displayId
-                                if (branchName == "main") {
-                                    mainBranches++
-                                } else if (branchName == "master") {
-                                    masterBranches++
-                                } else if (branchName.startsWith("release/")) {
-                                    releaseBranches++
-                                } else if (branchName.startsWith("hotfix/")) {
-                                    hotfixBranches++
-                                } else {
-                                    otherBranches++
+                                if (!repos) {
+                                    echo "WARNING: No repositories found in project ${project} or failed to fetch data."
+                                    return
                                 }
-                            }
 
-                            outputTable.add("${project}\t${repoName}\t${mainBranches}\t${masterBranches}\t${releaseBranches}\t${hotfixBranches}\t${otherBranches}")
+                                def repoTasks = [:]
+
+                                repos.each { repo ->
+                                    def repoName = repo.slug
+                                    repoTasks["Repo_${repoName}"] = {
+                                        node {
+                                            echo "  Processing repository: ${repoName}"
+
+                                            def branchesUrl = "${env.BITBUCKET_URL}/rest/api/1.0/projects/${project}/repos/${repoName}/branches"
+                                            def branches = makePaginatedApiCall(branchesUrl)
+
+                                            def mainBranches = 0
+                                            def masterBranches = 0
+                                            def releaseBranches = 0
+                                            def hotfixBranches = 0
+                                            def otherBranches = 0
+
+                                            branches.each { branch ->
+                                                def branchName = branch.displayId
+                                                if (branchName == "main") {
+                                                    mainBranches++
+                                                } else if (branchName == "master") {
+                                                    masterBranches++
+                                                } else if (branchName.startsWith("release/")) {
+                                                    releaseBranches++
+                                                } else if (branchName.startsWith("hotfix/")) {
+                                                    hotfixBranches++
+                                                } else {
+                                                    otherBranches++
+                                                }
+                                            }
+
+                                            csvContent.add("${project},${repoName},${mainBranches},${masterBranches},${releaseBranches},${hotfixBranches},${otherBranches}")
+                                        }
+                                    }
+                                }
+
+                                parallel repoTasks
+                            }
                         }
                     }
 
-                    // Print the table header
-                    echo "=========================================="
-                    echo "Project\tRepository\tMain\tMaster\tRelease/*\tHotfix/*\tOther"
-                    echo "=========================================="
+                    parallel parallelTasks
 
-                    // Print tab-separated values for Excel copy-paste
-                    outputTable.each { row ->
-                        echo row
-                    }
-
-                    echo "=========================================="
-                    echo "Copy the above table and paste it into Excel."
-                    echo "=========================================="
+                    // Write CSV to file
+                    writeFile file: env.CSV_FILE, text: csvContent.join("\n")
+                    echo "CSV file '${env.CSV_FILE}' created successfully."
                 }
+            }
+        }
+
+        stage('Archive CSV as Artifact') {
+            steps {
+                archiveArtifacts artifacts: env.CSV_FILE, fingerprint: true
+                echo "CSV file archived successfully. Download it from the Jenkins UI."
             }
         }
     }
