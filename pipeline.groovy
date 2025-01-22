@@ -25,6 +25,7 @@ pipeline {
 
                     def projectList = env.PROJECTS.split(",")
 
+                    // Function to make paginated API calls using cURL and readJSON
                     def makePaginatedApiCall = { baseUrl ->
                         def allResults = []
                         def start = 0
@@ -41,17 +42,15 @@ pipeline {
                                 break
                             }
 
-                            // FIX: Convert LazyMap properly while ensuring isLastPage is accessible
-                            def parsedResponse = new groovy.json.JsonSlurper().parseText(jsonResponse)
-                            def responseMap = parsedResponse as Map  // Ensure proper casting
+                            // FIX: Use readJSON to parse and avoid LazyMap issues
+                            def parsedResponse = readJSON(text: jsonResponse)
 
-                            allResults.addAll(responseMap.values)
+                            allResults.addAll(parsedResponse.values)
 
-                            // Check pagination safely
-                            if (responseMap.containsKey('isLastPage') && responseMap.isLastPage) {
+                            if (parsedResponse.isLastPage) {
                                 nextPageExists = false
                             } else {
-                                start = responseMap.nextPageStart ?: 0  // Handle missing nextPageStart
+                                start = parsedResponse.nextPageStart ?: 0
                             }
                         }
                         return allResults
