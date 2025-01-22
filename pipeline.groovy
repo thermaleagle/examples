@@ -1,9 +1,9 @@
 pipeline {
-    agent any  // Runs on any available Jenkins agent
+    agent any
 
     environment {
-        BITBUCKET_URL = "https://your-bitbucket-server-url"  // Replace with your Bitbucket Data Center URL
-        PROJECTS = "PROJECT1,PROJECT2,PROJECT3"  // Comma-separated project keys
+        BITBUCKET_URL = "https://your-bitbucket-server-url"
+        PROJECTS = "PROJECT1,PROJECT2,PROJECT3"
     }
 
     stages {
@@ -23,10 +23,8 @@ pipeline {
                     def totalMainBranches = 0
                     def totalOtherBranches = 0
 
-                    // Convert PROJECTS environment variable into a list
                     def projectList = env.PROJECTS.split(",")
 
-                    // Function to make paginated API calls using cURL
                     def makePaginatedApiCall = { baseUrl ->
                         def allResults = []
                         def start = 0
@@ -43,24 +41,25 @@ pipeline {
                                 break
                             }
 
+                            // FIX: Convert LazyMap properly while ensuring isLastPage is accessible
                             def parsedResponse = new groovy.json.JsonSlurper().parseText(jsonResponse)
-                            allResults.addAll(parsedResponse.values)
+                            def responseMap = parsedResponse as Map  // Ensure proper casting
 
-                            // Handle pagination
-                            if (parsedResponse.isLastPage) {
+                            allResults.addAll(responseMap.values)
+
+                            // Check pagination safely
+                            if (responseMap.containsKey('isLastPage') && responseMap.isLastPage) {
                                 nextPageExists = false
                             } else {
-                                start = parsedResponse.nextPageStart
+                                start = responseMap.nextPageStart ?: 0  // Handle missing nextPageStart
                             }
                         }
                         return allResults
                     }
 
-                    // Loop through each project
                     projectList.each { project ->
                         echo "Fetching repositories in project: ${project}"
 
-                        // Get all repositories in the project (paginated)
                         def reposUrl = "${env.BITBUCKET_URL}/rest/api/1.0/projects/${project}/repos"
                         def repos = makePaginatedApiCall(reposUrl)
 
@@ -73,14 +72,12 @@ pipeline {
                             def repoName = repo.slug
                             echo "  Processing repository: ${repoName}"
 
-                            // Get all branches (paginated)
                             def branchesUrl = "${env.BITBUCKET_URL}/rest/api/1.0/projects/${project}/repos/${repoName}/branches"
                             def branches = makePaginatedApiCall(branchesUrl)
 
                             def mainBranches = 0
                             def otherBranches = 0
 
-                            // Categorize branches
                             branches.each { branch ->
                                 def branchName = branch.displayId
                                 if (branchName == "main" || branchName == "master" || branchName.startsWith("release/") || branchName.startsWith("hotfix/")) {
@@ -93,13 +90,11 @@ pipeline {
                             echo "    Main Branches (main, master, release/*, hotfix/*): ${mainBranches}"
                             echo "    Other Branches: ${otherBranches}"
 
-                            // Update total counts
                             totalMainBranches += mainBranches
                             totalOtherBranches += otherBranches
                         }
                     }
 
-                    // Print final summary
                     echo "======================================"
                     echo "Total Main Branches Across All Projects: ${totalMainBranches}"
                     echo "Total Other Branches Across All Projects: ${totalOtherBranches}"
