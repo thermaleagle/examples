@@ -3,30 +3,31 @@ import java.util.regex.*;
 
 /**
  * A class for parsing and comparing Semantic Versions based on the SemVer 2.0 specification.
- * 
- * <p>Semantic versioning follows the format: {@code MAJOR.MINOR.PATCH-PRERELEASE+BUILD}.</p>
+ * <p>
+ * Semantic versioning follows the format: {@code MAJOR.MINOR.PATCH-PRERELEASE+BUILD}.
+ * </p>
  * <p>Comparison rules:
  * <ul>
- *     <li>MAJOR, MINOR, and PATCH are compared numerically.</li>
- *     <li>Pre-release versions (e.g., "alpha", "beta") are lower than stable versions.</li>
- *     <li>Build metadata (e.g., "+build.1") is ignored in comparisons.</li>
+ *     <li>MAJOR, MINOR, and PATCH numbers are compared numerically.</li>
+ *     <li>Pre-release versions (e.g., "alpha", "beta") are considered lower than stable versions.</li>
+ *     <li>Build metadata (e.g., "+build.1") is ignored when comparing versions.</li>
  * </ul>
  * </p>
  */
 public class SemanticVersion implements Comparable<SemanticVersion> {
-    private Integer major, minor, patch;
-    private String preRelease;
-    private String buildMetadata;
+    private final Integer major, minor, patch;
+    private final String preRelease;
+    private final String buildMetadata;
 
     private static final Pattern SEMVER_PATTERN = Pattern.compile(
         "^(\\d+|\\*)(?:\\.(\\d+|\\*))?(?:\\.(\\d+|\\*))?(?:-([0-9A-Za-z.-]+))?(?:\\+([0-9A-Za-z.-]+))?$"
     );
 
     /**
-     * Constructs a SemanticVersion from a string.
+     * Constructs a {@code SemanticVersion} object by parsing a version string.
      *
-     * @param version the version string to parse
-     * @throws IllegalArgumentException if the version format is invalid
+     * @param version The semantic version string to be parsed.
+     * @throws IllegalArgumentException if the input version string is not in valid SemVer format.
      */
     public SemanticVersion(String version) {
         Matcher matcher = SEMVER_PATTERN.matcher(version);
@@ -37,8 +38,8 @@ public class SemanticVersion implements Comparable<SemanticVersion> {
         this.major = parsePart(matcher.group(1));
         this.minor = parsePart(matcher.group(2));
         this.patch = parsePart(matcher.group(3));
-        this.preRelease = matcher.group(4);
-        this.buildMetadata = matcher.group(5);
+        this.preRelease = matcher.group(4);  // Can be null if absent
+        this.buildMetadata = matcher.group(5);  // Can be null if absent
     }
 
     private Integer parsePart(String part) {
@@ -51,35 +52,51 @@ public class SemanticVersion implements Comparable<SemanticVersion> {
     }
 
     /**
-     * Compares two semantic versions.
-     * 
-     * <p>Major, minor, and patch numbers are compared first. If these are equal, pre-release versions are compared lexically.</p>
+     * Determines if this version matches a wildcard version pattern.
+     * <p>
+     * Example:
+     * <ul>
+     *     <li>{@code 1.2.3} matches {@code 1.2.*}</li>
+     *     <li>{@code 1.5.7} matches {@code 1.*}</li>
+     *     <li>{@code 2.0.0} does not match {@code 1.*}</li>
+     * </ul>
+     * </p>
      *
-     * @param v1 the first version
-     * @param v2 the second version
-     * @return a negative integer if v1 < v2, zero if equal, a positive integer if v1 > v2
+     * @param pattern A version pattern with wildcards.
+     * @return {@code true} if this version matches the pattern, otherwise {@code false}.
+     */
+    public boolean matchesWildcard(SemanticVersion pattern) {
+        if (pattern.major != null && !pattern.major.equals(this.major)) return false;
+        if (pattern.minor != null && !pattern.minor.equals(this.minor)) return false;
+        if (pattern.patch != null && !pattern.patch.equals(this.patch)) return false;
+        return true;
+    }
+
+    /**
+     * Compares two semantic versions based on major, minor, patch, and pre-release precedence.
+     *
+     * @param v1 First version.
+     * @param v2 Second version.
+     * @return Comparison result (-1 if v1 < v2, 0 if equal, 1 if v1 > v2).
      */
     public static int compareVersions(SemanticVersion v1, SemanticVersion v2) {
-        Integer[] parts1 = {v1.major, v1.minor, v1.patch};
-        Integer[] parts2 = {v2.major, v2.minor, v2.patch};
+        int result = Integer.compare(v1.major, v2.major);
+        if (result != 0) return result;
 
-        // Compare major, minor, and patch versions
-        for (int i = 0; i < 3; i++) {
-            if (parts1[i] == null || parts2[i] == null) continue;
-            if (!parts1[i].equals(parts2[i])) return Integer.compare(parts1[i], parts2[i]);
-        }
+        result = Integer.compare(v1.minor, v2.minor);
+        if (result != 0) return result;
 
-        // Pre-release handling: Pre-release versions are lower than stable versions
-        if (v1.preRelease == null && v2.preRelease != null) return 1;
-        if (v1.preRelease != null && v2.preRelease == null) return -1;
-        if (v1.preRelease != null && v2.preRelease != null) {
-            return comparePreRelease(v1.preRelease, v2.preRelease);
-        }
+        result = Integer.compare(v1.patch, v2.patch);
+        if (result != 0) return result;
 
-        return 0;
+        return comparePreRelease(v1.preRelease, v2.preRelease);
     }
 
     private static int comparePreRelease(String pr1, String pr2) {
+        if (pr1 == null && pr2 == null) return 0; // Both are stable
+        if (pr1 == null) return 1;  // Stable > Pre-release
+        if (pr2 == null) return -1; // Pre-release < Stable
+
         String[] parts1 = pr1.split("\\.");
         String[] parts2 = pr2.split("\\.");
 
@@ -104,10 +121,10 @@ public class SemanticVersion implements Comparable<SemanticVersion> {
 
     @Override
     public String toString() {
-        return (major != null ? major : "*") + "." + 
-               (minor != null ? minor : "*") + "." + 
-               (patch != null ? patch : "*") + 
-               (preRelease != null ? "-" + preRelease : "") + 
+        return (major != null ? major : "*") + "." +
+               (minor != null ? minor : "*") + "." +
+               (patch != null ? patch : "*") +
+               (preRelease != null ? "-" + preRelease : "") +
                (buildMetadata != null ? "+" + buildMetadata : "");
     }
 }
