@@ -3,18 +3,19 @@ import org.junit.jupiter.params.provider.CsvSource;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for the {@code SemanticVersion} class.
- *
- * <p>Uses JUnit 5 with parameterized tests to verify version comparisons.</p>
+ * Unit tests for {@code SemanticVersion} class.
+ * <p>
+ * This class tests semantic version comparison and wildcard matching.
+ * </p>
  */
 public class SemanticVersionComparatorTest {
 
     /**
      * Tests semantic version comparison.
      *
-     * @param v1 the first version
-     * @param v2 the second version
-     * @param expected the expected comparison result (-1, 0, 1)
+     * @param v1 First version string.
+     * @param v2 Second version string.
+     * @param expected Expected comparison result (-1 if v1 < v2, 0 if equal, 1 if v1 > v2).
      */
     @ParameterizedTest
     @CsvSource({
@@ -35,11 +36,11 @@ public class SemanticVersionComparatorTest {
     }
 
     /**
-     * Tests wildcard matching functionality.
+     * Tests wildcard matching.
      *
-     * @param pattern the wildcard pattern
-     * @param version the actual version
-     * @param expected whether it should match (true/false)
+     * @param pattern The wildcard version pattern.
+     * @param version The actual version string.
+     * @param expected Expected result (true if matches, false otherwise).
      */
     @ParameterizedTest
     @CsvSource({
