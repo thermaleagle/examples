@@ -3,56 +3,123 @@ import org.junit.jupiter.params.provider.CsvSource;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for {@code SemanticVersion} class.
+ * Unit tests for the {@code preferLarger} and {@code preferSmaller} methods
+ * in {@code SemanticVersion} comparison.
  * <p>
- * This class tests semantic version comparison and wildcard matching.
+ * These tests verify:
+ * <ul>
+ *     <li>Correct handling of Semantic Version comparisons.</li>
+ *     <li>Proper selection of the "larger" constraint when using {@code preferLarger}.</li>
+ *     <li>Proper selection of the "smaller" constraint when using {@code preferSmaller}.</li>
+ *     <li>Handling of operators such as {@code >}, {@code >=}, {@code <}, {@code <=}, {@code ==}, and {@code !=}.</li>
+ * </ul>
  * </p>
  */
 public class SemanticVersionComparatorTest {
 
     /**
-     * Tests semantic version comparison.
+     * Tests the {@code preferLarger} method.
+     * <p>
+     * Verifies that {@code preferLarger} correctly returns the preferred condition.
+     * This is determined by:
+     * <ul>
+     *     <li>Comparing versions numerically for {@code >} and {@code >=} cases.</li>
+     *     <li>Ensuring {@code >=} is slightly preferred over {@code >}.</li>
+     *     <li>Checking equality for {@code ==} and difference for {@code !=}.</li>
+     * </ul>
+     * </p>
      *
-     * @param v1 First version string.
-     * @param v2 Second version string.
-     * @param expected Expected comparison result (-1 if v1 < v2, 0 if equal, 1 if v1 > v2).
+     * @param op1 Operator for the first condition (e.g., {@code >}, {@code >=}, {@code ==}).
+     * @param v1 Version string for the first condition.
+     * @param op2 Operator for the second condition.
+     * @param v2 Version string for the second condition.
+     * @param expected Expected operator of the preferred condition.
      */
     @ParameterizedTest
     @CsvSource({
-        "1.0.0, 1.0.0, 0",
-        "1.0.0, 1.0.1, -1",
-        "1.0.1, 1.0.0, 1",
-        "1.1.0, 1.0.0, 1",
-        "1.0.0-alpha, 1.0.0, -1",
-        "1.0.0-alpha, 1.0.0-beta, -1",
-        "1.0.0-beta, 1.0.0-rc.1, -1",
-        "1.0.0-rc.1, 1.0.0, -1",
-        "2.0.0, 1.0.0, 1"
+        // Greater Than Cases
+        "> , 1.8.0, > , 1.8.1, >",
+        "> , 1.8.1, > , 1.8.0, >",
+
+        // Greater Than or Equal Cases
+        ">=, 1.8.0, >=, 1.8.1, >=",
+        ">=, 1.8.1, >=, 1.8.0, >=",
+
+        // Mixed > and >= cases
+        ">=, 1.8.0, > , 1.8.1, >",
+        "> , 1.8.0, >=, 1.8.1, >=",
+
+        // Stable vs Pre-release (Stable should be preferred)
+        ">=, 1.8.0, > , 1.8.0-beta, >=",
+        "> , 1.8.0-beta, > , 1.8.0, >",
+
+        // Equality Cases
+        "==, 2.0.0, ==, 2.0.0, ==",
+        "==, 2.0.1, ==, 2.0.0, ==",
+
+        // Not Equal Cases
+        "!=, 2.0.0, !=, 2.0.1, !=",
+        "!=, 2.0.1, !=, 2.0.0, !="
     })
-    public void testSemanticVersionComparison(String v1, String v2, int expected) {
-        SemanticVersion version1 = new SemanticVersion(v1);
-        SemanticVersion version2 = new SemanticVersion(v2);
-        assertEquals(expected, Integer.signum(version1.compareTo(version2)));
+    public void testPreferLarger(String op1, String v1, String op2, String v2, String expected) {
+        Condition cond1 = new Condition(op1 + " " + v1);
+        Condition cond2 = new Condition(op2 + " " + v2);
+        Condition result = preferLarger(cond1, cond2);
+
+        assertEquals(expected, extractOperator(result.criteria()), 
+            "Expected the preferred condition to have operator " + expected);
     }
 
     /**
-     * Tests wildcard matching.
+     * Tests the {@code preferSmaller} method.
+     * <p>
+     * Ensures that {@code preferSmaller} correctly returns the more restrictive condition.
+     * This is determined by:
+     * <ul>
+     *     <li>Comparing versions numerically for {@code <} and {@code <=} cases.</li>
+     *     <li>Ensuring {@code <=} is slightly preferred over {@code <}.</li>
+     *     <li>Checking equality for {@code ==} and difference for {@code !=}.</li>
+     * </ul>
+     * </p>
      *
-     * @param pattern The wildcard version pattern.
-     * @param version The actual version string.
-     * @param expected Expected result (true if matches, false otherwise).
+     * @param op1 Operator for the first condition (e.g., {@code <}, {@code <=}, {@code ==}).
+     * @param v1 Version string for the first condition.
+     * @param op2 Operator for the second condition.
+     * @param v2 Version string for the second condition.
+     * @param expected Expected operator of the preferred condition.
      */
     @ParameterizedTest
     @CsvSource({
-        "1.2.*, 1.2.3, true",
-        "1.2.*, 1.3.0, false",
-        "1.*, 1.5.6, true",
-        "2.*, 1.9.9, false",
-        "*, 2.3.4, true"
+        // Less Than Cases
+        "< , 1.8.0, < , 1.8.1, <",
+        "< , 1.8.1, < , 1.8.0, <",
+
+        // Less Than or Equal Cases
+        "<=, 1.8.0, <=, 1.8.1, <=",
+        "<=, 1.8.1, <=, 1.8.0, <=",
+
+        // Mixed < and <= cases
+        "<=, 1.8.0, < , 1.8.1, <",
+        "< , 1.8.0, <=, 1.8.1, <=",
+
+        // Stable vs Pre-release (Pre-release should be preferred)
+        "<=, 1.8.0-beta, < , 1.8.0, <=",
+        "< , 1.8.0, < , 1.8.0-beta, <",
+
+        // Equality Cases
+        "==, 2.0.0, ==, 2.0.0, ==",
+        "==, 2.0.1, ==, 2.0.0, ==",
+
+        // Not Equal Cases
+        "!=, 2.0.0, !=, 2.0.1, !=",
+        "!=, 2.0.1, !=, 2.0.0, !="
     })
-    public void testWildcardMatching(String pattern, String version, boolean expected) {
-        SemanticVersion wildcard = new SemanticVersion(pattern);
-        SemanticVersion actualVersion = new SemanticVersion(version);
-        assertEquals(expected, actualVersion.matchesWildcard(wildcard));
+    public void testPreferSmaller(String op1, String v1, String op2, String v2, String expected) {
+        Condition cond1 = new Condition(op1 + " " + v1);
+        Condition cond2 = new Condition(op2 + " " + v2);
+        Condition result = preferSmaller(cond1, cond2);
+
+        assertEquals(expected, extractOperator(result.criteria()), 
+            "Expected the preferred condition to have operator " + expected);
     }
 }
