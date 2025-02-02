@@ -170,3 +170,15 @@ private int getOperatorPrecedence(String operator) {
         default -> throw new IllegalArgumentException("Unknown operator: " + operator);
     };
 }
+
+......
+private boolean shouldPreferSecondCondition(double value1, double value2, String operator1, String operator2) {
+    int precedence1 = getOperatorPrecedence(operator1);
+    int precedence2 = getOperatorPrecedence(operator2);
+
+    // If both operators are the same, prefer the larger value
+    if (operator1.equals(operator2)) return value2 > value1;
+
+    // The only difference from `shouldPreferFirstCondition` is reversing the preference order
+    return precedence1 > precedence2;
+}
