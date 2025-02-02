@@ -1,0 +1,94 @@
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+
+class ConditionTest {
+
+    static class Condition {
+        private final String operator;
+        private final double value;
+
+        Condition(String operator, double value) {
+            this.operator = operator;
+            this.value = value;
+        }
+
+        String extractOperatorFromCriteria() {
+            return operator;
+        }
+
+        String extractValueFromCriteria() {
+            return String.valueOf(value);
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "'>', 5, '>', 10, '>', 10",
+        "'>', 5, '>=', 10, '>=', 10",
+        "'>', 5, '==', 10, '>', 10",
+        "'>', 5, '<', 10, '<', 10",
+        "'>', 5, '<=', 10, '<=', 10",
+        
+        "'>=', 5, '>', 10, '>', 10",
+        "'>=', 5, '>=', 10, '>=', 10",
+        "'>=', 5, '==', 10, '>=', 10",
+        "'>=', 5, '<', 10, '<', 10",
+        "'>=', 5, '<=', 10, '<=', 10",
+
+        "'==', 5, '>', 10, '>', 10",
+        "'==', 5, '>=', 10, '>=', 10",
+        "'==', 5, '==', 10, '==', 10",
+        "'==', 5, '<', 10, '<', 10",
+        "'==', 5, '<=', 10, '<=', 10",
+
+        "'<', 5, '>', 10, '>', 10",
+        "'<', 5, '>=', 10, '>=', 10",
+        "'<', 5, '==', 10, '==', 10",
+        "'<', 5, '<', 10, '<', 10",
+        "'<', 5, '<=', 10, '<=', 10",
+
+        "'<=', 5, '>', 10, '>', 10",
+        "'<=', 5, '>=', 10, '>=', 10",
+        "'<=', 5, '==', 10, '==', 10",
+        "'<=', 5, '<', 10, '<', 10",
+        "'<=', 5, '<=', 10, '<=', 10"
+    })
+    void testPreferLarger(String op1, double val1, String op2, double val2, String expectedOp, double expectedVal) {
+        Condition condition1 = new Condition(op1, val1);
+        Condition condition2 = new Condition(op2, val2);
+
+        Condition result = preferLarger(condition1, condition2);
+
+        assertEquals(expectedOp, result.extractOperatorFromCriteria(), "Operator mismatch");
+        assertEquals(expectedVal, Double.parseDouble(result.extractValueFromCriteria()), "Value mismatch");
+    }
+
+    private Condition preferLarger(Condition condition1, Condition condition2) {
+        String operator1 = condition1.extractOperatorFromCriteria();
+        String operator2 = condition2.extractOperatorFromCriteria();
+        double value1 = Double.parseDouble(condition1.extractValueFromCriteria());
+        double value2 = Double.parseDouble(condition2.extractValueFromCriteria());
+
+        // Adjust values for ">=" and "<=" logic
+        double adjustedValue1 = operator1.equals(">=") ? value1 - 1 : (operator1.equals("<=") ? value1 + 1 : value1);
+        double adjustedValue2 = operator2.equals(">=") ? value2 - 1 : (operator2.equals("<=") ? value2 + 1 : value2);
+
+        // Compare and return the preferred condition
+        boolean secondIsLarger = compareConditions(operator1, adjustedValue1, operator2, adjustedValue2);
+        return secondIsLarger ? condition2 : condition1;
+    }
+
+    private boolean compareConditions(String operator1, double value1, String operator2, double value2) {
+        if (operator1.equals(">") && operator2.equals(">")) return value2 > value1;
+        if (operator1.equals(">") && operator2.equals(">=")) return value2 >= value1;
+        if (operator1.equals(">=") && operator2.equals(">")) return value2 > value1;
+        if (operator1.equals(">=") && operator2.equals(">=")) return value2 >= value1;
+        if (operator1.equals("==") && operator2.equals("==")) return value2 == value1;
+        if (operator1.equals("<") && operator2.equals("<")) return value2 < value1;
+        if (operator1.equals("<") && operator2.equals("<=")) return value2 <= value1;
+        if (operator1.equals("<=") && operator2.equals("<")) return value2 < value1;
+        if (operator1.equals("<=") && operator2.equals("<=")) return value2 <= value1;
+        return false;
+    }
+}
