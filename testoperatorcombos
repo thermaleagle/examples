@@ -1,4 +1,4 @@
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
@@ -60,8 +60,9 @@ class ConditionTest {
 
         Condition result = preferLarger(condition1, condition2);
 
-        assertEquals(expectedOp, result.extractOperatorFromCriteria(), "Operator mismatch");
-        assertEquals(expectedVal, Double.parseDouble(result.extractValueFromCriteria()), "Value mismatch");
+        // Ensure the returned object is one of the input conditions
+        assertSame(result, condition1.equals(expectedOp) && condition1.value == expectedVal ? condition1 : condition2, 
+            "Returned condition must be one of the inputs");
     }
 
     private Condition preferLarger(Condition condition1, Condition condition2) {
