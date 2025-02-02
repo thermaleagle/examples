@@ -26,13 +26,13 @@ class ConditionTest {
     @CsvSource({
         "'>', 5, '>', 10, '>', 10",
         "'>', 5, '>=', 10, '>=', 10",
-        "'>', 5, '==', 10, '>', 10",
+        "'>', 5, '==', 10, '==', 10",
         "'>', 5, '<', 10, '<', 10",
         "'>', 5, '<=', 10, '<=', 10",
         
         "'>=', 5, '>', 10, '>', 10",
         "'>=', 5, '>=', 10, '>=', 10",
-        "'>=', 5, '==', 10, '>=', 10",
+        "'>=', 5, '==', 10, '==', 10",
         "'>=', 5, '<', 10, '<', 10",
         "'>=', 5, '<=', 10, '<=', 10",
 
@@ -60,9 +60,11 @@ class ConditionTest {
 
         Condition result = preferLarger(condition1, condition2);
 
-        // Ensure the returned object is one of the input conditions
-        assertSame(result, condition1.equals(expectedOp) && condition1.value == expectedVal ? condition1 : condition2, 
-            "Returned condition must be one of the inputs");
+        // Ensure that the result is one of the original conditions
+        Condition expectedCondition = (condition1.extractOperatorFromCriteria().equals(expectedOp) && condition1.value == expectedVal) 
+                                        ? condition1 : condition2;
+
+        assertSame(expectedCondition, result, "Returned condition must be one of the inputs with matching operator and value.");
     }
 
     private Condition preferLarger(Condition condition1, Condition condition2) {
@@ -90,6 +92,6 @@ class ConditionTest {
         if (operator1.equals("<") && operator2.equals("<=")) return value2 <= value1;
         if (operator1.equals("<=") && operator2.equals("<")) return value2 < value1;
         if (operator1.equals("<=") && operator2.equals("<=")) return value2 <= value1;
-        return false;
+        return value2 > value1;  // Default case: prefer the condition with the larger value
     }
 }
