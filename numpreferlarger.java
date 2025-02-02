@@ -90,3 +90,83 @@ private int getOperatorPrecedence(String operator) {
             throw new IllegalArgumentException("Unknown operator: " + operator);
     }
 }
+
+
+
+.....
+
+/**
+ * Selects the condition that allows a larger value to pass.
+ * Prefers looser conditions (e.g., ">" over ">=") and, for identical conditions,
+ * selects the one with the larger value.
+ *
+ * @param condition1 The first condition to compare
+ * @param condition2 The second condition to compare
+ * @return The preferred condition that allows a larger value to pass
+ */
+public Condition preferConditionForLargerValue(final Condition condition1, final Condition condition2) {
+    final String operator1 = condition1.extractOperatorFromCriteria();
+    final String operator2 = condition2.extractOperatorFromCriteria();
+
+    final double value1 = parseAdjustedValue(condition1.extractValueFromCriteria(), operator1);
+    final double value2 = parseAdjustedValue(condition2.extractValueFromCriteria(), operator2);
+
+    return shouldPreferSecondCondition(value1, value2, operator1, operator2) ? condition2 : condition1;
+}
+
+/**
+ * Parses and adjusts values for conditions.
+ * Adjusts "<=" values by increasing by 1, since "<=" allows larger values.
+ *
+ * @param valueStr The value as a string
+ * @param operator The operator associated with the value
+ * @return The adjusted value
+ */
+private double parseAdjustedValue(String valueStr, String operator) {
+    double value = Double.parseDouble(valueStr);
+    return "<=".equals(operator) ? value + 1 : value;  // Adjust "<=" logic
+}
+
+/**
+ * Determines whether the second condition should be preferred.
+ * Looser conditions are preferred, and for identical operators, larger values are chosen.
+ *
+ * @param value1    Value of the first condition
+ * @param value2    Value of the second condition
+ * @param operator1 Operator of the first condition
+ * @param operator2 Operator of the second condition
+ * @return True if condition2 should be preferred, otherwise false
+ */
+private boolean shouldPreferSecondCondition(double value1, double value2, String operator1, String operator2) {
+    int precedence1 = getOperatorPrecedence(operator1);
+    int precedence2 = getOperatorPrecedence(operator2);
+
+    // If both conditions use the same operator, prefer the one with the larger value
+    if (operator1.equals(operator2)) return value2 > value1;
+
+    // Explicit prioritization rules
+    if (operator1.equals(">") && operator2.equals(">=")) return false;
+    if (operator1.equals(">=") && operator2.equals(">")) return true;
+    if (operator1.equals(">") && operator2.equals("==")) return true;
+    if (operator1.equals("==") && operator2.equals(">=")) return true;
+    if (operator1.equals("<=") && operator2.equals(">")) return true;
+
+    // Default: Use precedence ranking
+    return precedence1 < precedence2;
+}
+
+/**
+ * Defines operator precedence: Higher numbers indicate looser conditions.
+ *
+ * @param operator The operator to evaluate
+ * @return The precedence of the operator
+ */
+private int getOperatorPrecedence(String operator) {
+    return switch (operator) {
+        case ">=" -> 4;
+        case "==" -> 3;
+        case ">"  -> 2;
+        case "<=" -> 1;
+        default -> throw new IllegalArgumentException("Unknown operator: " + operator);
+    };
+}
