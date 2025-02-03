@@ -1,0 +1,173 @@
+
+
+<!-- START -->
+<h1>User Manual: Recovering a Deleted Branch in Bitbucket Data Center</h1>
+
+<h2>1. Introduction</h2>
+<p>
+It is common practice to delete a source branch after merging a pull request to keep the repository clean. However, sometimes you may need to recover this deleted branch (for instance, if additional changes or hotfixes are required on that branch). This guide explains how to restore a deleted branch from Bitbucket Data Center.
+</p>
+<p><strong>Key Points to Note:</strong></p>
+<ul>
+  <li>Even though the branch is deleted, the commits still exist in the Git repository unless they have been garbage-collected.</li>
+  <li>You can restore the branch by identifying the last commit on that branch and creating a new branch from that commit.</li>
+  <li>You can restore through the Bitbucket UI if the commit is still visible, or you can restore from your local repository if you have the old branch checked out (or still in the reflog).</li>
+</ul>
+
+<hr />
+
+<h2>2. Quick Summary of Recovery Options</h2>
+<ol>
+  <li><strong>Using Bitbucket UI (if commits are still in the repository and visible):</strong>
+    <ul>
+      <li>Access the repository’s commits page or the merged pull request page.</li>
+      <li>Find the commit where the old (deleted) branch last pointed.</li>
+      <li>Create a new branch from that commit.</li>
+    </ul>
+  </li>
+  <li><strong>Using Local Git CLI:</strong>
+    <ul>
+      <li>Locate the commit hash (for example, via <code>git reflog</code> or <code>git log</code>).</li>
+      <li>Create and push a new branch to Bitbucket from that commit hash.</li>
+      <li>(Optional) Create a new pull request or simply keep using the new branch.</li>
+    </ul>
+  </li>
+</ol>
+
+<hr />
+
+<h2>3. Prerequisites and Considerations</h2>
+<ul>
+  <li><strong>Permissions:</strong> Ensure you have permissions (Write/Developer or higher) in Bitbucket to create branches.</li>
+  <li><strong>Commit Existence:</strong> The deleted branch’s last commit must still exist in the repository (not GC’ed). If commits have been removed by housekeeping or are otherwise inaccessible, you cannot recover the branch through normal means.</li>
+  <li><strong>Local Copy:</strong> If you have a clone of the repository that still references the old branch, it’s generally simpler to recover the branch from there.</li>
+</ul>
+
+<hr />
+
+<h2>4. Recovery Through the Bitbucket UI</h2>
+<ol>
+  <li><strong>Navigate to the Repository</strong>
+    <ul>
+      <li>Log in to Bitbucket Data Center.</li>
+      <li>Go to the <strong>Project</strong> containing the repository.</li>
+      <li>Select the <strong>Repository</strong> you’re working with.</li>
+    </ul>
+  </li>
+  <li><strong>Locate the Commit</strong>
+    <ul>
+      <li>Click on <strong>Commits</strong> (in the left-hand sidebar).</li>
+      <li>Search for the commit associated with the merged pull request.</li>
+      <li>If the pull request was recently merged, you can also go to the <strong>Pull requests</strong> section, find the merged pull request, and inspect its commits.</li>
+      <li>Copy or note the <strong>commit hash</strong> (a 40-character string, typically).</li>
+    </ul>
+  </li>
+  <li><strong>Create a New Branch</strong>
+    <ul>
+      <li>In the <strong>Commits</strong> view or in the <strong>Pull request</strong> view, open the commit details.</li>
+      <li>Look for an option like <strong>Create branch</strong> or <strong>Branch from here</strong>.
+        <br />If this is not visible, you can do it via a local clone—see Section 5 below.</li>
+      <li>Give your new branch an appropriate name (e.g., <code>recovered-branch</code>).</li>
+      <li>Confirm creation.</li>
+    </ul>
+  </li>
+  <li><strong>Verification</strong>
+    <ul>
+      <li>Go to the <strong>Branches</strong> view in Bitbucket to confirm the new branch (<code>recovered-branch</code>) is now listed.</li>
+      <li>You can now continue making changes on the restored branch as needed.</li>
+    </ul>
+  </li>
+</ol>
+
+<hr />
+
+<h2>5. Recovery Through Local Git CLI</h2>
+<ol>
+  <li><strong>Open Terminal / Command Prompt</strong>
+    <ul>
+      <li>Make sure you have your local repository cloned and navigate to it in your terminal.</li>
+    </ul>
+  </li>
+  <li><strong>Fetch All References</strong>
+    <pre><code>git fetch --all</code></pre>
+    <p>This ensures you have all remote commits and tags updated in your local environment.</p>
+  </li>
+  <li><strong>Locate the Commit Hash</strong>
+    <ul>
+      <li><strong>Option A:</strong> If you previously had the branch checked out, try:
+        <pre><code>git reflog</code></pre>
+        Look for entries referencing the old branch name or the last known commit message. Copy the commit hash (e.g., <code>abc1234</code>).
+      </li>
+      <li><strong>Option B:</strong> Use Git log or search by message:
+        <pre><code>git log --all --grep="some unique text from commit message"</code></pre>
+        Once you find the relevant commit, note its hash.
+      </li>
+    </ul>
+  </li>
+  <li><strong>Create and Check Out a New Branch</strong>
+    <pre><code>git checkout -b recovered-branch &lt;COMMIT_HASH&gt;</code></pre>
+    <p>Replace <code>&lt;COMMIT_HASH&gt;</code> with the actual commit ID you found.</p>
+  </li>
+  <li><strong>Push the New Branch to Bitbucket</strong>
+    <pre><code>git push -u origin recovered-branch</code></pre>
+    <p>This command creates the new branch in the remote Bitbucket repository and sets your local branch to track it.</p>
+  </li>
+  <li><strong>Verification in Bitbucket</strong>
+    <ul>
+      <li>Go to the <strong>Branches</strong> view in Bitbucket.</li>
+      <li>Confirm the branch (<code>recovered-branch</code>) is now listed.</li>
+    </ul>
+  </li>
+</ol>
+
+<hr />
+
+<h2>6. Common Troubleshooting</h2>
+<ol>
+  <li><strong>Commit Not Found in Bitbucket UI</strong>
+    <ul>
+      <li>Sometimes, merged pull requests are squashed or rebased, which might change or remove the original commits. If this happened, check your local branches or reflog.</li>
+    </ul>
+  </li>
+  <li><strong>Garbage Collection</strong>
+    <ul>
+      <li>Git’s garbage collection might remove commits that are no longer referenced by any branch or tag. If too much time has passed, your commit could be lost. In that case, you might need to check backups or rely on any local clones that still have the commit.</li>
+    </ul>
+  </li>
+  <li><strong>No Local Clones Containing the Branch</strong>
+    <ul>
+      <li>If no one on the team has a local copy, or if no references remain in the server, the branch may be irrecoverable. Check your CI/CD system or any historical archives for a repository snapshot that may contain the commit.</li>
+    </ul>
+  </li>
+  <li><strong>Permission Issues</strong>
+    <ul>
+      <li>Ensure you have the necessary permissions on the repository to create and push new branches. If you see permission errors, contact your Bitbucket/Data Center administrator.</li>
+    </ul>
+  </li>
+</ol>
+
+<hr />
+
+<h2>7. Best Practices</h2>
+<ul>
+  <li><strong>Avoid Permanent Deletions:</strong> Make sure everyone is certain that the branch is truly no longer needed before deleting it, or keep a backup reference if it might be needed again.</li>
+  <li><strong>Use Tags for Important Commits:</strong> Before merging/deleting, consider tagging important commits. Tags remain in the repository indefinitely (unless explicitly removed).</li>
+  <li><strong>Keep a Clear Branching Strategy:</strong> Use a naming convention for branches and merges so that it’s easy to identify which commits belong to which branch.</li>
+</ul>
+
+<hr />
+
+<h2>8. Conclusion</h2>
+<p>
+Recovering a deleted branch in Bitbucket Data Center is straightforward if the commits still exist in the Git history. The easiest approach is to find the commit in the Bitbucket UI and create a new branch from that commit. If the UI no longer references it, you can restore the branch via your local Git repository using the commit’s hash. In both cases, always verify that the new branch is properly pushed to Bitbucket so your team can collaborate.
+</p>
+
+<hr />
+
+<p><strong>Document Revision History</strong></p>
+<ul>
+  <li><strong>Version 1.0</strong> – Initial documentation outlining the steps to recover a deleted branch.</li>
+  <li><strong>Version 1.1</strong> – Added troubleshooting and best practices.</li>
+</ul>
+<!-- END -->
+
