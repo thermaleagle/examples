@@ -1,22 +1,68 @@
 <!-- START -->
-<h1>🚨 Important Notice: Automatic Deletion of Source Branches on Merge</h1>
+<h1>🚨 Important Notice: Changes to Branch Deletion on Merge</h1>
 
 <h2>🔔 Project-Level Change Alert</h2>
 
 <p>
-To maintain repository hygiene and streamline branch management, we have enabled the <strong>"Delete source branch on merge"</strong> setting at the project level in Bitbucket Data Center. 
+To improve repository management, we have enabled the **"Delete source branch on merge"** setting for feature branches while **protecting release, main, and hotfix branches from deletion** at the project level.
 </p>
+
+<h3>📌 What This Means for You</h3>
+<ul>
+  <li>**Feature branches (feature/*, bugfix/*, task/*)** will be **automatically deleted on merge**, unless manually unchecked.</li>
+  <li>**Main, master, release, and hotfix branches cannot be deleted at the project level**, even if someone tries to delete them manually.</li>
+  <li>**Repository admins can override this restriction at the repository level** (instructions below).</li>
+</ul>
+
+<hr />
+
+<h2>🛠 How Repository Admins Can Override Branch Protection Rules</h2>
 
 <p>
-This change <strong>automatically enables the "Delete source branch" checkbox</strong> in the merge pull request dialog box.
+While project-level settings prevent deletion of critical branches, **repository administrators can override these settings** to allow deletion within their own repositories.
 </p>
 
-<h3>📌 What Does This Mean for You?</h3>
-<ul>
-  <li>When merging a pull request, the **source branch will be deleted by default** unless you manually uncheck the option.</li>
-  <li>If you are merging a **main/master, release, or hotfix branch**, <strong>double-check before merging</strong> to avoid unintended deletions.</li>
-  <li>If a critical branch is deleted inadvertently, **follow the recovery steps below** to restore it.</li>
-</ul>
+<h3>🚀 Steps for Repository Admins to Allow Branch Deletion</h3>
+
+<ol>
+  <li><strong>Open Repository Settings</strong>
+    <ul>
+      <li>Go to **Bitbucket Data Center**.</li>
+      <li>Navigate to your **Project** and select the **Repository** where you want to allow deletions.</li>
+      <li>Click on **Repository Settings**.</li>
+    </ul>
+  </li>
+  
+  <li><strong>Modify Branch Permissions</strong>
+    <ul>
+      <li>Scroll to **Branch Permissions**.</li>
+      <li>Locate the protection rules preventing deletion of:
+        <ul>
+          <li><code>main</code></li>
+          <li><code>master</code></li>
+          <li><code>release/*</code></li>
+          <li><code>hotfix/*</code></li>
+        </ul>
+      </li>
+      <li>Click **Edit** next to the rule.</li>
+      <li>Under **"Allowed to delete branches"**, grant permission to specific users or teams.</li>
+      <li>Save changes.</li>
+    </ul>
+  </li>
+  
+  <li><strong>Manually Delete a Protected Branch</strong>
+    <ul>
+      <li>Once deletion permissions are enabled, go to **Branches**.</li>
+      <li>Find the branch you want to delete (e.g., <code>release/1.0.0</code>).</li>
+      <li>Click the **Trash Bin (Delete)** icon next to the branch.</li>
+      <li>Confirm deletion.</li>
+    </ul>
+  </li>
+</ol>
+
+<p>
+💡 **Warning:** This action permanently deletes the branch. If unsure, create a backup or tag before deletion.
+</p>
 
 <hr />
 
@@ -66,12 +112,6 @@ This change <strong>automatically enables the "Delete source branch" checkbox</s
       <li>Confirm creation.</li>
     </ul>
   </li>
-  <li><strong>Verification</strong>
-    <ul>
-      <li>Go to the <strong>Branches</strong> view in Bitbucket.</li>
-      <li>Confirm that the restored branch is listed.</li>
-    </ul>
-  </li>
 </ol>
 
 <hr />
@@ -103,44 +143,31 @@ This change <strong>automatically enables the "Delete source branch" checkbox</s
     <pre><code>git checkout -b recovered-branch &lt;COMMIT_HASH&gt;</code></pre>
     <p>Replace <code>&lt;COMMIT_HASH&gt;</code> with the actual commit ID.</p>
   </li>
-  <li><strong>Push the Branch Back to Bitbucket</strong>
-    <pre><code>git push -u origin recovered-branch</code></pre>
-    <p>Verify that the branch is now available in Bitbucket.</p>
-  </li>
 </ol>
 
 <hr />
 
-<h2>4️⃣ Common Issues & Troubleshooting</h2>
-
-<ul>
-  <li><strong>Commit Not Found in Bitbucket UI:</strong> If commits are missing, check your local Git history using <code>git reflog</code> or <code>git log</code>.</li>
-  <li><strong>Git Garbage Collection (GC):</strong> If the repository has removed old commits, the branch may be unrecoverable unless someone has a local copy.</li>
-  <li><strong>Permission Issues:</strong> Ensure you have branch creation rights in the repository.</li>
-</ul>
-
-<hr />
-
-<h2>5️⃣ Best Practices to Avoid Accidental Deletion</h2>
+<h2>4️⃣ Best Practices to Avoid Accidental Deletion</h2>
 <ul>
   <li>Always <strong>double-check</strong> the "Delete source branch" checkbox when merging.</li>
-  <li>For important branches (main, release, hotfix), consider protecting them using branch permissions in Bitbucket.</li>
+  <li>For important branches (main, release, hotfix), **deletion is blocked by default**, but repo admins can override this.</li>
   <li>Use <strong>tags</strong> before merging if you want a persistent reference.</li>
 </ul>
 
 <hr />
 
-<h2>6️⃣ Conclusion</h2>
+<h2>5️⃣ Conclusion</h2>
 <p>
-With the new project-level setting, branches will be deleted on merge unless manually unchecked. If you accidentally delete an important branch, you can restore it using the methods outlined above. Always verify the merge settings before finalizing a pull request.
+With the new project-level setting, **feature branches will be deleted automatically upon merge**, while **release, main, master, and hotfix branches are protected by default**. However, repository admins can modify permissions if needed. If an important branch is deleted, follow the recovery steps above.
 </p>
 
 <hr />
 
 <p><strong>📌 Document Revision History</strong></p>
 <ul>
-  <li><strong>Version 1.0</strong> – Project-level change notification and branch recovery guide.</li>
-  <li><strong>Version 1.1</strong> – Added troubleshooting and best practices.</li>
+  <li><strong>Version 1.0</strong> – Initial documentation for branch deletion settings.</li>
+  <li><strong>Version 1.1</strong> – Updated to reflect branch protection rules.</li>
+  <li><strong>Version 1.2</strong> – Added instructions for repository admins to override deletion restrictions.</li>
 </ul>
 <!-- END -->
 
