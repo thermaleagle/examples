@@ -20,6 +20,9 @@ pipeline {
                         "proj3": ["https://stash:8081"]
                     ]
 
+                    // Debugging: Print Project-Instance Mappings
+                    echo "Project-Instance Mappings: ${projectBitbucketUrls}"
+
                     // Function to make paginated API calls using cURL
                     def makePaginatedApiCall = { baseUrl, token ->
                         def allResults = []
@@ -54,8 +57,9 @@ pipeline {
                     def credentialIds = projectList.collectMany { project ->
                         def instances = projectBitbucketUrls[project]
                         instances.collect { instance ->
-                            def port = instance.split(":")[1]
-                            def tokenName = port == "8081" ? "BB_TOKEN_${project}" : "BB_TOKEN_${project}_8082"
+                            def port = instance.tokenize(":")[-1]  // Extract correct port (8081 or 8082)
+                            def tokenName = port == "8081" ? "BB_TOKEN_${project}" : "BB_TOKEN_${project}_${port}"
+                            echo "Looking up credentials: ${tokenName} for ${instance}"
                             string(credentialsId: tokenName, variable: tokenName)
                         }
                     }
@@ -66,10 +70,14 @@ pipeline {
                         // Assign tokens dynamically for each project-instance combination
                         projectList.each { project ->
                             projectBitbucketUrls[project].each { instance ->
-                                def port = instance.split(":")[1]
-                                def tokenKey = port == "8081" ? "BB_TOKEN_${project}" : "BB_TOKEN_${project}_8082"
+                                def port = instance.tokenize(":")[-1]
+                                def tokenKey = port == "8081" ? "BB_TOKEN_${project}" : "BB_TOKEN_${project}_${port}"
+                                
                                 if (env[tokenKey]) {
                                     projectTokens["${project}_${port}"] = env[tokenKey]
+                                    echo "Assigned token: ${tokenKey} for ${project} on ${instance}"
+                                } else {
+                                    echo "WARNING: No token found for ${tokenKey}"
                                 }
                             }
                         }
@@ -80,7 +88,8 @@ pipeline {
                         // Process each project separately for each Bitbucket instance
                         projectList.each { project ->
                             projectBitbucketUrls[project].each { instance ->
-                                def accessToken = projectTokens["${project}_${instance.split(':')[1]}"]
+                                def port = instance.tokenize(":")[-1]
+                                def accessToken = projectTokens["${project}_${port}"]
                                 def bitbucketUrl = instance
                                 def csvFile = "branch_counts_${project}_${instance.replaceAll('[^a-zA-Z0-9]', '_')}.csv"
                                 def csvContent = []
@@ -150,26 +159,6 @@ pipeline {
                         echo "Consolidated CSV file '${allProjectsCsvFile}' created successfully."
                     }
                 }
-            }
-        }
-    }
-
-    post {
-        always {
-            script {
-                def projectList = env.PROJECTS.split(",")
-                def bitbucketUrls = env.BITBUCKET_URLS.split(",")
-
-                def csvFiles = []
-                projectList.each { project ->
-                    bitbucketUrls.each { instance ->
-                        csvFiles.add("branch_counts_${project}_${instance.replaceAll('[^a-zA-Z0-9]', '_')}.csv")
-                    }
-                }
-                csvFiles.add("branch_counts_all_projects.csv")
-
-                archiveArtifacts artifacts: csvFiles.join(","), fingerprint: true
-                echo "CSV files archived successfully. Download them from the Jenkins UI."
             }
         }
     }
