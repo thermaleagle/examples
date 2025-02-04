@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        BITBUCKET_URLS = "https://stash:8081,https://stash:8082"  // Comma-separated Bitbucket instances
+        BITBUCKET_URLS = "https://stash:8081,https://stash:8082"  // Comma-separated Bitbucket URLs
         PROJECTS = "proj1,proj2,proj3"  // Comma-separated project keys
     }
 
@@ -13,6 +13,7 @@ pipeline {
                     def bitbucketUrls = env.BITBUCKET_URLS.split(",")
                     def projectList = env.PROJECTS.split(",")
 
+                    // Map of project names to their corresponding Bitbucket instances
                     def projectBitbucketUrls = [
                         "proj1": ["https://stash:8081", "https://stash:8082"],
                         "proj2": ["https://stash:8082"],
@@ -48,24 +49,38 @@ pipeline {
                         return allResults
                     }
 
-                    // Credential collection with both naming conventions
-                    withCredentials(projectList.collectMany { project ->
-                        projectBitbucketUrls[project].collect { instance ->
-                            def tokenId = projectBitbucketUrls[project].size() > 1
-                                ? "http-access-token-${project}-${instance.replaceAll('[^a-zA-Z0-9]', '_')}"
-                                : "http-access-token-${project}"
-                            string(credentialsId: tokenId, variable: "BB_TOKEN_${project}_${instance.replaceAll('[^a-zA-Z0-9]', '_')}")
+                    // Collect credentials using **existing naming convention** for port 8081
+                    // Use a new convention for port 8082
+                    def credentialIds = projectList.collectMany { project ->
+                        def instances = projectBitbucketUrls[project]
+                        instances.collect { instance ->
+                            def port = instance.split(":")[1]
+                            def tokenName = port == "8081" ? "BB_TOKEN_${project}" : "BB_TOKEN_${project}_8082"
+                            string(credentialsId: tokenName, variable: tokenName)
                         }
-                    }) {
+                    }
+
+                    withCredentials(credentialIds) {
+                        def projectTokens = [:]
+
+                        // Assign tokens dynamically for each project-instance combination
+                        projectList.each { project ->
+                            projectBitbucketUrls[project].each { instance ->
+                                def port = instance.split(":")[1]
+                                def tokenKey = port == "8081" ? "BB_TOKEN_${project}" : "BB_TOKEN_${project}_8082"
+                                if (env[tokenKey]) {
+                                    projectTokens["${project}_${port}"] = env[tokenKey]
+                                }
+                            }
+                        }
+
                         def allCsvContent = []
                         allCsvContent.add("BitbucketURL,Project,Repository,Main,Master,Release/*,Hotfix/*,Feature")
 
+                        // Process each project separately for each Bitbucket instance
                         projectList.each { project ->
                             projectBitbucketUrls[project].each { instance ->
-                                def tokenVar = projectBitbucketUrls[project].size() > 1
-                                    ? "BB_TOKEN_${project}_${instance.replaceAll('[^a-zA-Z0-9]', '_')}"
-                                    : "BB_TOKEN_${project}"
-                                def accessToken = env[tokenVar]
+                                def accessToken = projectTokens["${project}_${instance.split(':')[1]}"]
                                 def bitbucketUrl = instance
                                 def csvFile = "branch_counts_${project}_${instance.replaceAll('[^a-zA-Z0-9]', '_')}.csv"
                                 def csvContent = []
@@ -118,6 +133,8 @@ pipeline {
                                     }
 
                                     csvContent.add("${bitbucketUrl},${project},${repoName},${branchCounts['main']},${branchCounts['master']},${branchCounts['release/*']},${branchCounts['hotfix/*']},${branchCounts['feature']}")
+
+                                    // Append to consolidated report
                                     allCsvContent.add("${bitbucketUrl},${project},${repoName},${branchCounts['main']},${branchCounts['master']},${branchCounts['release/*']},${branchCounts['hotfix/*']},${branchCounts['feature']}")
                                 }
 
@@ -127,10 +144,10 @@ pipeline {
                             }
                         }
 
-                        // Write the aggregated CSV file
-                        def allCsvFile = "all_projects.csv"
-                        writeFile file: allCsvFile, text: allCsvContent.join("\n")
-                        echo "Consolidated CSV file '${allCsvFile}' created successfully."
+                        // Write the consolidated report
+                        def allProjectsCsvFile = "branch_counts_all_projects.csv"
+                        writeFile file: allProjectsCsvFile, text: allCsvContent.join("\n")
+                        echo "Consolidated CSV file '${allProjectsCsvFile}' created successfully."
                     }
                 }
             }
@@ -143,14 +160,13 @@ pipeline {
                 def projectList = env.PROJECTS.split(",")
                 def bitbucketUrls = env.BITBUCKET_URLS.split(",")
 
-                // Collect individual project CSVs
                 def csvFiles = []
                 projectList.each { project ->
                     bitbucketUrls.each { instance ->
                         csvFiles.add("branch_counts_${project}_${instance.replaceAll('[^a-zA-Z0-9]', '_')}.csv")
                     }
                 }
-                csvFiles.add("all_projects.csv")
+                csvFiles.add("branch_counts_all_projects.csv")
 
                 archiveArtifacts artifacts: csvFiles.join(","), fingerprint: true
                 echo "CSV files archived successfully. Download them from the Jenkins UI."
