@@ -162,4 +162,24 @@ pipeline {
             }
         }
     }
+
+post {
+    always {
+        script {
+            def projectList = env.PROJECTS.split(",")
+            def bitbucketUrls = env.BITBUCKET_URLS.split(",")
+
+            def csvFiles = []
+            projectList.each { project ->
+                bitbucketUrls.each { instance ->
+                    csvFiles.add("branch_counts_${project}_${instance.replaceAll('[^a-zA-Z0-9]', '_')}.csv")
+                }
+            }
+            csvFiles.add("branch_counts_all_projects.csv")
+
+            archiveArtifacts artifacts: csvFiles.join(","), fingerprint: true
+            echo "CSV files archived successfully. Download them from the Jenkins UI."
+        }
+    }
+}
 }
