@@ -1,53 +1,9 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-
-    <groupId>com.example</groupId>
-    <artifactId>json-schema-generator</artifactId>
-    <version>1.0-SNAPSHOT</version>
-
-    <properties>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
-    </properties>
-
-    <dependencies>
-        <!-- Jackson for JSON processing -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <version>2.15.2</version>
-        </dependency>
-
-        <!-- JSON Schema Generator -->
-        <dependency>
-            <groupId>com.github.victools</groupId>
-            <artifactId>jsonschema-generator</artifactId>
-            <version>4.30.0</version>
-        </dependency>
-    </dependencies>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.8.1</version>
-                <configuration>
-                    <source>17</source>
-                    <target>17</target>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
-</project>
-
 package com.example;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONTokener;
-import org.json.JSONArray;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -124,10 +80,12 @@ public class JsonSchemaGenerator {
     private static JSONObject inferType(List<JSONObject> jsonObjects, String key) {
         JSONObject typeObject = new JSONObject();
         Set<String> observedTypes = new HashSet<>();
+        List<Object> arraySamples = new ArrayList<>();
 
         for (JSONObject json : jsonObjects) {
             if (json.has(key)) {
                 Object value = json.get(key);
+
                 if (value instanceof Integer) {
                     observedTypes.add("integer");
                 } else if (value instanceof Double) {
@@ -136,16 +94,44 @@ public class JsonSchemaGenerator {
                     observedTypes.add("boolean");
                 } else if (value instanceof JSONObject) {
                     observedTypes.add("object");
+                    typeObject.put("properties", inferNestedObject((JSONObject) value));
                 } else if (value instanceof JSONArray) {
                     observedTypes.add("array");
+
+                    JSONArray jsonArray = (JSONArray) value;
+                    if (!jsonArray.isEmpty()) {
+                        arraySamples.add(jsonArray.get(0));
+                    }
                 } else {
                     observedTypes.add("string");
                 }
             }
         }
 
-        // If multiple types found, set "anyOf"
-        if (observedTypes.size() > 1) {
+        // Handle arrays properly
+        if (observedTypes.contains("array")) {
+            JSONArray itemsArray = new JSONArray();
+            for (Object sample : arraySamples) {
+                JSONObject arraySchema = new JSONObject();
+                if (sample instanceof Integer) {
+                    arraySchema.put("type", "integer");
+                } else if (sample instanceof Double) {
+                    arraySchema.put("type", "number");
+                } else if (sample instanceof Boolean) {
+                    arraySchema.put("type", "boolean");
+                } else if (sample instanceof JSONObject) {
+                    arraySchema.put("type", "object");
+                    arraySchema.put("properties", inferNestedObject((JSONObject) sample));
+                } else {
+                    arraySchema.put("type", "string");
+                }
+                itemsArray.put(arraySchema);
+            }
+            typeObject.put("type", "array");
+            typeObject.put("items", itemsArray.length() == 1 ? itemsArray.get(0) : itemsArray);
+        }
+        // Handle objects with multiple possible types (anyOf)
+        else if (observedTypes.size() > 1) {
             JSONArray anyOfArray = new JSONArray();
             for (String type : observedTypes) {
                 JSONObject typeEntry = new JSONObject();
@@ -153,10 +139,41 @@ public class JsonSchemaGenerator {
                 anyOfArray.put(typeEntry);
             }
             typeObject.put("anyOf", anyOfArray);
-        } else {
+        }
+        // Handle single-type fields
+        else {
             typeObject.put("type", observedTypes.iterator().next());
         }
 
         return typeObject;
+    }
+
+    private static JSONObject inferNestedObject(JSONObject jsonObject) {
+        JSONObject properties = new JSONObject();
+        for (String key : jsonObject.keySet()) {
+            Object value = jsonObject.get(key);
+            JSONObject propertySchema = new JSONObject();
+
+            if (value instanceof Integer) {
+                propertySchema.put("type", "integer");
+            } else if (value instanceof Double) {
+                propertySchema.put("type", "number");
+            } else if (value instanceof Boolean) {
+                propertySchema.put("type", "boolean");
+            } else if (value instanceof JSONObject) {
+                propertySchema.put("type", "object");
+                propertySchema.put("properties", inferNestedObject((JSONObject) value));
+            } else if (value instanceof JSONArray) {
+                propertySchema.put("type", "array");
+                JSONArray jsonArray = (JSONArray) value;
+                if (!jsonArray.isEmpty()) {
+                    propertySchema.put("items", inferNestedObject(jsonArray.getJSONObject(0)));
+                }
+            } else {
+                propertySchema.put("type", "string");
+            }
+            properties.put(key, propertySchema);
+        }
+        return properties;
     }
 }
