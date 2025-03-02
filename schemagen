@@ -11,6 +11,8 @@ import java.util.*;
 
 public class JsonSchemaGenerator {
 
+    private static final Map<String, JSONObject> definitions = new HashMap<>();
+
     public static void main(String[] args) {
         String folderPath = "src/main/resources/json_samples"; // Folder with JSON files
         generateSchemaFromFolder(folderPath);
@@ -27,7 +29,6 @@ public class JsonSchemaGenerator {
         Set<String> allKeys = new HashSet<>();
         Map<String, Integer> keyFrequency = new HashMap<>();
 
-        // Read all JSON files in the folder
         File[] files = folder.listFiles((dir, name) -> name.endsWith(".json"));
         if (files == null || files.length == 0) {
             System.out.println("No JSON files found in folder: " + folderPath);
@@ -39,7 +40,6 @@ public class JsonSchemaGenerator {
                 JSONObject json = new JSONObject(new JSONTokener(fis));
                 jsonObjects.add(json);
 
-                // Track all keys and their occurrence count
                 for (String key : json.keySet()) {
                     allKeys.add(key);
                     keyFrequency.put(key, keyFrequency.getOrDefault(key, 0) + 1);
@@ -50,7 +50,6 @@ public class JsonSchemaGenerator {
             }
         }
 
-        // Determine required properties (must appear in all JSONs)
         Set<String> requiredProperties = new HashSet<>();
         for (String key : keyFrequency.keySet()) {
             if (keyFrequency.get(key) == jsonObjects.size()) {
@@ -58,26 +57,28 @@ public class JsonSchemaGenerator {
             }
         }
 
-        // Generate JSON Schema
         JSONObject schema = new JSONObject();
         schema.put("$schema", "https://json-schema.org/draft/2020-12/schema");
         schema.put("type", "object");
 
         JSONObject properties = new JSONObject();
         for (String key : allKeys) {
-            properties.put(key, inferType(jsonObjects, key));
+            properties.put(key, inferType(jsonObjects, key, key));
         }
         schema.put("properties", properties);
 
-        // Add required properties list
         JSONArray requiredArray = new JSONArray();
         requiredProperties.forEach(requiredArray::put);
         schema.put("required", requiredArray);
 
+        if (!definitions.isEmpty()) {
+            schema.put("$defs", new JSONObject(definitions));
+        }
+
         System.out.println("Generated JSON Schema:\n" + schema.toString(4));
     }
 
-    private static JSONObject inferType(List<JSONObject> jsonObjects, String key) {
+    private static JSONObject inferType(List<JSONObject> jsonObjects, String key, String path) {
         JSONObject typeObject = new JSONObject();
         Set<String> observedTypes = new HashSet<>();
         List<Object> arraySamples = new ArrayList<>();
@@ -94,7 +95,11 @@ public class JsonSchemaGenerator {
                     observedTypes.add("boolean");
                 } else if (value instanceof JSONObject) {
                     observedTypes.add("object");
-                    typeObject.put("properties", inferNestedObject((JSONObject) value));
+                    String defKey = "def_" + key;
+                    if (!definitions.containsKey(defKey)) {
+                        definitions.put(defKey, inferNestedObject((JSONObject) value, defKey));
+                    }
+                    typeObject.put("$ref", "#/$defs/" + defKey);
                 } else if (value instanceof JSONArray) {
                     observedTypes.add("array");
 
@@ -108,7 +113,6 @@ public class JsonSchemaGenerator {
             }
         }
 
-        // Handle arrays properly
         if (observedTypes.contains("array")) {
             JSONArray itemsArray = new JSONArray();
             for (Object sample : arraySamples) {
@@ -120,8 +124,7 @@ public class JsonSchemaGenerator {
                 } else if (sample instanceof Boolean) {
                     arraySchema.put("type", "boolean");
                 } else if (sample instanceof JSONObject) {
-                    arraySchema.put("type", "object");
-                    arraySchema.put("properties", inferNestedObject((JSONObject) sample));
+                    arraySchema.put("$ref", "#/$defs/" + key);
                 } else {
                     arraySchema.put("type", "string");
                 }
@@ -129,9 +132,7 @@ public class JsonSchemaGenerator {
             }
             typeObject.put("type", "array");
             typeObject.put("items", itemsArray.length() == 1 ? itemsArray.get(0) : itemsArray);
-        }
-        // Handle objects with multiple possible types (anyOf)
-        else if (observedTypes.size() > 1) {
+        } else if (observedTypes.size() > 1) {
             JSONArray anyOfArray = new JSONArray();
             for (String type : observedTypes) {
                 JSONObject typeEntry = new JSONObject();
@@ -139,16 +140,14 @@ public class JsonSchemaGenerator {
                 anyOfArray.put(typeEntry);
             }
             typeObject.put("anyOf", anyOfArray);
-        }
-        // Handle single-type fields
-        else {
+        } else {
             typeObject.put("type", observedTypes.iterator().next());
         }
 
         return typeObject;
     }
 
-    private static JSONObject inferNestedObject(JSONObject jsonObject) {
+    private static JSONObject inferNestedObject(JSONObject jsonObject, String defKey) {
         JSONObject properties = new JSONObject();
         for (String key : jsonObject.keySet()) {
             Object value = jsonObject.get(key);
@@ -161,19 +160,21 @@ public class JsonSchemaGenerator {
             } else if (value instanceof Boolean) {
                 propertySchema.put("type", "boolean");
             } else if (value instanceof JSONObject) {
-                propertySchema.put("type", "object");
-                propertySchema.put("properties", inferNestedObject((JSONObject) value));
+                propertySchema.put("$ref", "#/$defs/" + defKey);
             } else if (value instanceof JSONArray) {
-                propertySchema.put("type", "array");
                 JSONArray jsonArray = (JSONArray) value;
                 if (!jsonArray.isEmpty()) {
-                    propertySchema.put("items", inferNestedObject(jsonArray.getJSONObject(0)));
+                    propertySchema.put("type", "array");
+                    propertySchema.put("items", inferNestedObject(jsonArray.getJSONObject(0), defKey));
                 }
             } else {
                 propertySchema.put("type", "string");
             }
             properties.put(key, propertySchema);
         }
-        return properties;
+        JSONObject schema = new JSONObject();
+        schema.put("type", "object");
+        schema.put("properties", properties);
+        return schema;
     }
 }
