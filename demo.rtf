@@ -1,0 +1,229 @@
+
+⸻
+
+Screencast Script: Introducing Arbiter - A Rules Evaluation Engine
+
+1. Introduction (Camera on - personal intro, then switch to screen share)
+
+Roshan:
+“Hello, everyone! Welcome to this screencast where I’ll introduce you to Arbiter, a rules evaluation engine that enforces policies, validates configurations, and ensures compliance using structured rules.”
+
+“Arbiter helps teams automate decision-making by evaluating predefined rules against input parameters and categorizing results as Red, Amber, Green, Not Evaluated, or Superseded. It also provides clear explanations for each evaluation. Let’s dive in!”
+
+(Switch to screen share)
+
+⸻
+
+2. Overview of Arbiter (Show high-level architecture diagram or code structure)
+
+“Arbiter processes a set of rules, where each rule consists of:
+	1.	Condition – The core logic that defines how a rule is evaluated.
+	2.	Exemptions – A separate array of conditions that allow specific cases to be excluded.
+	3.	Evaluation Result – Each rule evaluation results in:
+	•	RED – The rule failed.
+	•	AMBER – The rule is in a warning state.
+	•	GREEN – The rule passed.
+	•	NOT_EVALUATED – The rule wasn’t processed due to missing parameters.
+	•	SUPERSEDED – The rule was overridden by another rule enforcing a preferred outcome based on largerispreferred.
+
+“Arbiter generates a structured JSON output containing detailed evaluations of all rules, including an overall result.”
+
+⸻
+
+3. Key Components (Walk through code sections one by one)
+
+a. Rule Definition (Show an example rule in JSON format)
+
+“Each rule consists of a single condition field. Here’s an example that enforces Angular version compliance for frontend components:”
+
+{
+  "id": "RULE_ANGULAR_VERSION",
+  "description": "Ensure Angular version is at least 12.0.0 for frontend components",
+  "condition": {
+    "parameter": {
+      "name": "angularVersion",
+      "type": "SemVer",
+      "largerispreferred": true
+    },
+    "criteria": {
+      "operator": ">=",
+      "value": "12.0.0"
+    },
+    "andCondition": {
+      "parameter": {
+        "name": "component",
+        "type": "String"
+      },
+      "criteria": {
+        "operator": "matchesPattern",
+        "value": "^(frontend-.*|angular-.*)"
+      }
+    }
+  }
+}
+
+“This rule ensures that frontend components run Angular 12.0.0 or later.”
+
+⸻
+
+b. Rule Evaluation and Superseding (Explain rule precedence using largerispreferred)
+
+“Now, let’s see how a rule can be superseded. A rule is superseded if another rule enforces a more preferred value based on largerispreferred.”
+
+Example of Superseding Rules
+
+{
+  "id": "RULE_ANGULAR_LATEST",
+  "description": "Enforce Angular 14.0.0 or higher",
+  "condition": {
+    "parameter": {
+      "name": "angularVersion",
+      "type": "SemVer",
+      "largerispreferred": true
+    },
+    "criteria": {
+      "operator": ">=",
+      "value": "14.0.0"
+    }
+  }
+}
+
+“If RULE_ANGULAR_LATEST is evaluated first and passes, RULE_ANGULAR_VERSION will be marked as SUPERSEDED.”
+
+⸻
+
+c. Exempting a Legacy Component from a SonarQube Rule (Demonstrate exemptions in rules)
+
+“Arbiter allows rules to exclude certain components using exemptions. Here’s a rule that enforces zero major SonarQube failures, except for a legacy component.”
+
+{
+  "id": "RULE_SONAR_MAJOR_ISSUES",
+  "description": "Ensure major SonarQube issues are 0, excluding legacy components",
+  "condition": {
+    "parameter": {
+      "name": "sonarMajorIssues",
+      "type": "java.lang.Integer"
+    },
+    "criteria": {
+      "operator": "==",
+      "value": "0"
+    }
+  },
+  "exemptions": [
+    {
+      "parameter": {
+        "name": "component",
+        "type": "String"
+      },
+      "criteria": {
+        "operator": "==",
+        "value": "legacy-backend"
+      }
+    }
+  ]
+}
+
+“This ensures that all components must have zero major SonarQube issues, except legacy-backend, which is exempted.”
+
+⸻
+
+4. Running Arbiter (Execute sample evaluations and show JSON output)
+
+“Now, let’s run Arbiter with these sample rules and review the evaluation results.”
+
+(Run Arbiter with sample parameters and display JSON output)
+
+ArbiterEngine engine = new ArbiterEngine();
+JSONObject output = engine.evaluate(parameters);
+System.out.println(output.toString(4));
+
+Example JSON Output from Arbiter
+
+{
+  "evaluationDate": "2025-03-08",
+  "overallResult": "RED",
+  "redEvaluations": [
+    {
+      "id": "RULE_ANGULAR_VERSION",
+      "result": "RED",
+      "message": "Angular version 11.0.5 is lower than the required minimum of 12.0.0."
+    },
+    {
+      "id": "RULE_SONAR_MAJOR_ISSUES",
+      "result": "RED",
+      "message": "Component has 3 major Sonar issues, must be 0."
+    }
+  ],
+  "greenEvaluations": [
+    {
+      "id": "RULE_ANGULAR_VERSION",
+      "result": "GREEN",
+      "message": "Angular version 13.2.0 meets the minimum requirement of 12.0.0."
+    },
+    {
+      "id": "RULE_CWE_79",
+      "result": "GREEN",
+      "message": "No CWE-79 vulnerabilities found."
+    }
+  ],
+  "ignoredEvaluations": [
+    {
+      "id": "RULE_SONAR_MAJOR_ISSUES",
+      "result": "NOT_EVALUATED",
+      "message": "Component is exempted from the rule due to legacy status."
+    }
+  ],
+  "supersededEvaluations": [
+    {
+      "id": "RULE_ANGULAR_VERSION",
+      "result": "SUPERSEDED",
+      "message": "A rule requiring Angular version >= 14.0.0 took precedence."
+    }
+  ]
+}
+
+“This output clearly categorizes rule evaluations, exemptions, and superseded rules.”
+
+⸻
+
+5. Conclusion & Next Steps (Camera back on - wrap-up statement)
+
+Roshan:
+“That concludes our demo of Arbiter! We explored:
+	•	How Arbiter evaluates rules and exemptions.
+	•	How rules are superseded when enforcing preferred values.
+	•	How to interpret the structured JSON output.”
+
+“Arbiter simplifies compliance enforcement by providing clear, structured rule evaluations. It ensures automation, consistency, and traceability in decision-making.”
+
+“If you have any questions or feedback, feel free to post them in the Viva Engage community. Thanks for watching, and see you next time!”
+
+(End screen with credits or company logo if applicable)
+
+⸻
+
+Recording Tips for Viva Engage Upload
+	•	Keep the IDE font large for readability.
+	•	Use step-by-step explanations with clear examples.
+	•	Record in short segments to make editing easier.
+	•	Ensure good audio quality for clarity.
+	•	Use a noise-free environment for better engagement.
+
+⸻
+Section
+Estimated Duration
+Introduction
+1.5 - 2 min
+Overview of Arbiter
+2 - 3 min
+Key Components (Rules, Superseding, Exemptions)
+5 - 6 min
+Code Walkthrough (3 JSON examples + execution demo)
+8 - 10 min
+Running Arbiter & Reviewing Output
+3 - 4 min
+Conclusion & Next Steps
+1.5 - 2 min
+Total Estimated Time
+20 - 25 min
+
